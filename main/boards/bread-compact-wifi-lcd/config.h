@@ -286,4 +286,7 @@
 // A MCP Test: Control a lamp
 #define LAMP_GPIO GPIO_NUM_18
 
+/* 门控 GPIO 定义 */
+#define DOOR_GPIO GPIO_NUM_8
+
 #endif // _BOARD_CONFIG_H_

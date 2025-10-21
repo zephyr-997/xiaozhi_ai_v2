@@ -1,0 +1,383 @@
+---
+alwaysApply: true
+---
+[1 tool called]
+
+# Xiaozhi-ESP32 物联网开发规范
+
+**项目**: ESP32-S3 嵌入式物联网系统  
+**板型**: bread-compact-esp32-lcd  
+**核心**: MCP 协议外设控制  
+**语言**: C++ (ESP-IDF)
+
+## 一、核心原则
+
+- ✅ **所有外设统一使用 MCP 协议控制**
+- ✅ **板型特定控制器放在** `main/boards/bread-compact-esp32-lcd/`
+- ✅ **硬件配置集中在** `config.h`
+- ✅ **每个控制器独立注册 MCP 工具**
+
+## 二、文件组织
+
+### 目录结构
+```
+main/boards/bread-compact-esp32-lcd/
+├── config.h                    # GPIO 和硬件参数配置
+├── esp32_bread_board_lcd.cc    # 板型主类
+├── {name}_controller.h         # 外设控制器（简单逻辑仅头文件）
+└── {name}_controller.cc        # 复杂逻辑分离实现文件（可选）
+```
+
+### 文件命名
+- 控制器: `relay_controller.h`, `sensor_controller.h`
+- 驱动类: `dht22_driver.h`, `pwm_driver.h`
+
+## 三、外设控制器标准模板
+
+```cpp
+#ifndef __YOUR_CONTROLLER_H__
+#define __YOUR_CONTROLLER_H__
+
+#include <driver/gpio.h>
+#include "mcp_server.h"
+#include "esp_log.h"
+
+#define TAG "YourController"
+
+class YourController {
+private:
+    gpio_num_t gpio_pin_;
+    bool state_;
+    
+    void InitializeHardware() {
+        gpio_config_t config = {
+            .pin_bit_mask = (1ULL << gpio_pin_),
+            .mode = GPIO_MODE_OUTPUT,
+            .pull_up_en = GPIO_PULLUP_DISABLE,
+            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+            .intr_type = GPIO_INTR_DISABLE,
+        };
+        ESP_ERROR_CHECK(gpio_config(&config));
+        gpio_set_level(gpio_pin_, 0);
+    }
+    
+    void RegisterMcpTools() {
+        auto& mcp_server = McpServer::GetInstance();
+        
+        // 查询状态工具
+        mcp_server.AddTool(
+            "self.device.get_state",
+            "获取设备状态",
+            PropertyList(),
+            [this](const PropertyList&) -> ReturnValue {
+                return state_ ? "on" : "off";
+            }
+        );
+        
+        // 控制工具
+        mcp_server.AddTool(
+            "self.device.set_state",
+            "设置设备开关",
+            PropertyList({Property("state", kPropertyTypeBoolean)}),
+            [this](const PropertyList& properties) -> ReturnValue {
+                state_ = properties["state"].value<bool>();
+                gpio_set_level(gpio_pin_, state_ ? 1 : 0);
+                ESP_LOGI(TAG, "State: %d", state_);
+                return true;
+            }
+        );
+    }
+    
+public:
+    explicit YourController(gpio_num_t pin) : gpio_pin_(pin), state_(false) {
+        InitializeHardware();
+        RegisterMcpTools();
+        ESP_LOGI(TAG, "Initialized on GPIO %d", pin);
+    }
+};
+
+#endif
+```
+
+## 四、MCP 工具规范
+
+### 命名规则
+```
+格式: self.{模块}.{动作}
+
+✅ self.relay.turn_on           # 继电器开
+✅ self.relay.turn_off          # 继电器关
+✅ self.sensor.read_temperature # 读温度
+✅ self.motor.set_speed         # 设速度
+✅ self.led.set_rgb             # 设颜色
+
+❌ relay_on                     # 缺少层级
+❌ turnOnRelay                  # 驼峰命名
+```
+
+### 描述文本
+- **清晰具体**，让 AI 能理解用途
+- **包含关键信息**：参数范围、单位、副作用
+
+```cpp
+// ✅ 好的描述
+"打开继电器，控制连接的电器设备通电"
+"读取温度，返回摄氏度值（范围 -40 到 80）"
+
+// ❌ 差的描述
+"打开"
+"读取数据"
+```
+
+### 参数设计
+```cpp
+// ✅ 带范围限制
+PropertyList({
+    Property("speed", kPropertyTypeInteger, 0, 100),  // 0-100%
+    Property("mode", kPropertyTypeInteger, 1, 3)      // 模式 1-3
+})
+
+// ❌ 无限制
+PropertyList({
+    Property("value", kPropertyTypeInteger)  // 不明确
+})
+```
+
+### 返回值
+```cpp
+// 状态查询 - JSON 字符串
+return "{\"temp\": 25.5, \"humi\": 60}";
+
+// 操作结果 - 布尔值
+return true;   // 成功
+return false;  // 失败
+
+// 数值 - 整数或字符串
+return 42;
+return "sensor_ok";
+```
+
+## 五、板型主类集成
+
+### 在 esp32_bread_board_lcd.cc 添加
+```cpp
+#include "your_controller.h"
+
+class CompactWifiBoardLCD : public DualNetworkBoard {
+private:
+    void InitializeTools() {
+        ESP_LOGI(TAG, "Initializing IoT peripherals...");
+        
+        // 使用 static 确保单例
+        static RelayController relay(RELAY_GPIO);
+        static SensorController sensor(SENSOR_GPIO);
+        
+        ESP_LOGI(TAG, "Peripherals ready");
+    }
+    
+public:
+    CompactWifiBoardLCD() : DualNetworkBoard(...) {
+        // ... 其他初始化 ...
+        InitializeTools();  // ⚠️ 关键步骤
+    }
+};
+```
+
+### 在 config.h 添加 GPIO
+```cpp
+// ==================== 物联网外设 GPIO ====================
+#define RELAY_GPIO          GPIO_NUM_12
+#define SENSOR_GPIO         GPIO_NUM_35
+#define MOTOR_PWM_GPIO      GPIO_NUM_25
+
+// 参数配置
+#define SENSOR_INTERVAL_MS  5000
+#define MOTOR_PWM_FREQ      1000
+```
+
+## 六、硬件接口快速参考
+
+### GPIO 输出
+```cpp
+gpio_config_t config = {
+    .pin_bit_mask = (1ULL << gpio_pin),
+    .mode = GPIO_MODE_OUTPUT,
+};
+ESP_ERROR_CHECK(gpio_config(&config));
+gpio_set_level(gpio_pin, level);
+```
+
+### GPIO 输入
+```cpp
+gpio_config_t config = {
+    .pin_bit_mask = (1ULL << gpio_pin),
+    .mode = GPIO_MODE_INPUT,
+    .pull_up_en = GPIO_PULLUP_ENABLE,
+};
+ESP_ERROR_CHECK(gpio_config(&config));
+int level = gpio_get_level(gpio_pin);
+```
+
+### PWM (LEDC)
+```cpp
+#include <driver/ledc.h>
+
+ledc_timer_config_t timer = {
+    .speed_mode = LEDC_LOW_SPEED_MODE,
+    .duty_resolution = LEDC_TIMER_8_BIT,
+    .timer_num = LEDC_TIMER_0,
+    .freq_hz = 1000,
+    .clk_cfg = LEDC_AUTO_CLK
+};
+ledc_timer_config(&timer);
+
+ledc_channel_config_t channel = {
+    .gpio_num = gpio_pin,
+    .speed_mode = LEDC_LOW_SPEED_MODE,
+    .channel = LEDC_CHANNEL_0,
+    .timer_sel = LEDC_TIMER_0,
+    .duty = 0,
+};
+ledc_channel_config(&channel);
+
+// 设置占空比 (0-255)
+ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, duty);
+ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
+```
+
+### I2C
+```cpp
+#include <driver/i2c_master.h>
+
+i2c_device_config_t dev_cfg = {
+    .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+    .device_address = 0x48,
+    .scl_speed_hz = 100000,
+};
+i2c_master_bus_add_device(bus_handle, &dev_cfg, &dev_handle);
+
+// 读写
+i2c_master_receive(dev_handle, data, len, -1);
+i2c_master_transmit(dev_handle, data, len, -1);
+```
+
+## 七、代码规范
+
+### 日志级别
+```cpp
+ESP_LOGE(TAG, "Error: %s", msg);      // 错误
+ESP_LOGW(TAG, "Warning: timeout");    // 警告
+ESP_LOGI(TAG, "Device ready");        // 重要信息
+ESP_LOGD(TAG, "Value: %d", val);      // 调试细节
+```
+
+### 错误处理
+```cpp
+// ✅ 检查返回值
+esp_err_t ret = gpio_set_level(pin, 1);
+if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "Failed: %s", esp_err_to_name(ret));
+    return false;
+}
+
+// ✅ 使用宏（关键操作）
+ESP_ERROR_CHECK(gpio_config(&config));
+```
+
+### 资源管理
+```cpp
+class Controller {
+private:
+    QueueHandle_t queue_;
+public:
+    Controller() {
+        queue_ = xQueueCreate(10, sizeof(int));
+    }
+    ~Controller() {
+        if (queue_) vQueueDelete(queue_);
+    }
+};
+```
+
+## 八、开发流程检查清单
+
+开发新外设时：
+
+1. [ ] 在 `config.h` 定义 GPIO 和参数
+2. [ ] 创建 `{name}_controller.h`
+3. [ ] 实现硬件初始化
+4. [ ] 注册至少 2 个 MCP 工具（查询+控制）
+5. [ ] 在 `InitializeTools()` 中实例化
+6. [ ] 添加错误处理和日志
+7. [ ] 通过 `idf.py build` 编译验证
+8. [ ] 通过 MCP 协议测试工具调用
+
+## 九、常见模式参考
+
+### 继电器控制器
+```cpp
+mcp_server.AddTool("self.relay.turn_on", "打开继电器", 
+    PropertyList(), [this](const PropertyList&) -> ReturnValue {
+        gpio_set_level(gpio_pin_, 1);
+        return true;
+    });
+```
+
+### 温湿度传感器
+```cpp
+mcp_server.AddTool("self.sensor.read", "读取温湿度", 
+    PropertyList(), [this](const PropertyList&) -> ReturnValue {
+        float temp, humi;
+        ReadSensor(&temp, &humi);
+        char buf[64];
+        snprintf(buf, sizeof(buf), "{\"temp\":%.1f,\"humi\":%.1f}", temp, humi);
+        return std::string(buf);
+    });
+```
+
+### 电机速度控制
+```cpp
+mcp_server.AddTool("self.motor.set_speed", "设置速度 0-100%", 
+    PropertyList({Property("speed", kPropertyTypeInteger, 0, 100)}),
+    [this](const PropertyList& properties) -> ReturnValue {
+        int speed = properties["speed"].value<int>();
+        uint32_t duty = (speed * 255) / 100;
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, duty);
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
+        return true;
+    });
+```
+
+## 十、参考文档
+
+- **MCP 协议**: `docs/mcp-protocol.md`
+- **MCP 用法**: `docs/mcp-usage.md`
+- **项目架构**: `architecture.md`
+- **ESP-IDF API**: https://docs.espressif.com/projects/esp-idf/
+
+---
+
+**说明**: 
+- 编译使用 `idf.py build`、`idf.py flash` 手动执行
+- 遇到问题请提供编译/运行日志
+- 本规范专注于 MCP 外设控制开发
+```
+
+---
+
+这个精简版规范：
+
+✅ **移除了**：
+- 自动编译测试相关内容
+- 版本控制详细规范
+- 单元测试框架
+- 过于详细的注释规范
+
+✅ **保留了核心**：
+- MCP 工具开发模板和规范
+- 硬件接口快速参考代码
+- 板型集成步骤
+- 开发检查清单
+- 常见模式示例
+
+更加实用和聚焦于你的实际需求！需要的话可以直接复制到 `.cursor/rules/xiaozhi-esp32.mdc` 文件中。

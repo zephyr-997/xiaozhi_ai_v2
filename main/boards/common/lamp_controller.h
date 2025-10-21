@@ -11,6 +11,7 @@ private:
 
 public:
     LampController(gpio_num_t gpio_num) : gpio_num_(gpio_num) {
+        // Initialize the GPIO
         gpio_config_t config = {
             .pin_bit_mask = (1ULL << gpio_num_),
             .mode = GPIO_MODE_OUTPUT,
@@ -21,6 +22,8 @@ public:
         ESP_ERROR_CHECK(gpio_config(&config));
         gpio_set_level(gpio_num_, 0);
 
+        // Add MCP server tools
+        // 注册工具
         auto& mcp_server = McpServer::GetInstance();
         mcp_server.AddTool("self.lamp.get_state", "Get the power state of the lamp", PropertyList(), [this](const PropertyList& properties) -> ReturnValue {
             return power_ ? "{\"power\": true}" : "{\"power\": false}";

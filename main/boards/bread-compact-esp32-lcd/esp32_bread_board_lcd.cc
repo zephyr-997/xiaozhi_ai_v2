@@ -5,6 +5,7 @@
 #include "application.h"
 #include "button.h"
 #include "config.h"
+#include "dual_door_controller.h"
 #include "led/single_led.h"
 
 #include <wifi_station.h>
@@ -174,7 +175,7 @@ private:
     }
 
 public:
-    CompactWifiBoardLCD() :
+    CompactWifiBoardLCD() : 
         DualNetworkBoard(ML307_TX_PIN, ML307_RX_PIN),
         boot_button_(BOOT_BUTTON_GPIO), touch_button_(TOUCH_BUTTON_GPIO), asr_button_(ASR_BUTTON_GPIO) {
         InitializeSpi();
