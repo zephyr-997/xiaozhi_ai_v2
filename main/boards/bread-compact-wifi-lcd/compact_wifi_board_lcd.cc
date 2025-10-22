@@ -8,6 +8,7 @@
 #include "mcp_server.h"
 #include "lamp_controller.h"
 #include "fan_controller.h"
+#include "mqtt_controller.h"
 #include "led/single_led.h"
 
 #include <wifi_station.h>
@@ -138,7 +139,8 @@ private:
     void InitializeTools() {
         static LampController lamp(LAMP_GPIO);
         static FanController fan(FAN_GPIO);
-        ESP_LOGI(TAG, "IoT peripherals initialized");
+        static MqttController mqtt(MQTT_URI, CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD, MQTT_COMMAND_TOPIC);
+        ESP_LOGI(TAG, "IoT peripherals initialized (Lamp, Fan, MQTT)");
     }
 
 public:

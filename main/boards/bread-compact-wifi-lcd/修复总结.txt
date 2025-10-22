@@ -1,0 +1,49 @@
+================================================================================
+  MQTT 控制器崩溃问题修复总结
+================================================================================
+
+【问题】
+  错误：assert failed: tcpip_send_msg_wait_sem (Invalid mbox)
+  原因：MQTT 客户端在 WiFi 未就绪时启动，导致 TCP/IP 栈崩溃
+
+【解决方案】
+  延迟启动 MQTT 客户端，等待 WiFi 连接并获取 IP 后再启动
+
+【修改文件】
+  ✅ main/boards/bread-compact-wifi-lcd/mqtt_controller.h
+
+【关键修改】
+  1. 新增成员变量：bool client_started_
+  2. 新增头文件：esp_event.h, esp_wifi.h
+  3. 新增 WiFi 事件处理器：WifiEventHandler()
+  4. 修改初始化逻辑：注册事件监听，延迟启动
+  5. 更新析构函数：注销事件处理器
+
+【修复前启动流程】
+  系统启动 → 创建 MqttController → 立即启动 MQTT → ❌ 崩溃
+
+【修复后启动流程】
+  系统启动 → 创建 MqttController → 等待 WiFi → WiFi 连接成功 → 
+  获取 IP → 启动 MQTT → ✅ 正常运行
+
+【下一步操作】
+  1. 打开 ESP-IDF 命令行环境
+  2. cd D:\Working\xiaozhi\xiaozhi-esp32
+  3. idf.py build
+  4. idf.py flash monitor
+
+【预期日志】
+  I (420) MqttController: MQTT client initialized, waiting for WiFi connection...
+  I (3450) MqttController: WiFi connected with IP, starting MQTT client...
+  I (3550) MqttController: MQTT connected to broker
+
+【详细文档】
+  - MQTT_FIX_REPORT.md      - 详细技术报告
+  - 编译测试说明.md         - 编译测试步骤
+  - MQTT_README.md          - MQTT 功能使用说明
+
+【修复时间】2025-10-22
+【状态】✅ 已完成
+
+================================================================================
+

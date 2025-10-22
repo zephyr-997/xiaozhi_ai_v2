@@ -283,10 +283,19 @@
 #endif
 
 
-// A MCP Test: Control a lamp
+// ==================== 物联网外设配置 ====================
+
+// MCP 测试: 灯控制
 #define LAMP_GPIO GPIO_NUM_18
 
-/* 风扇 GPIO 定义 */
+// 风扇 GPIO 定义
 #define FAN_GPIO GPIO_NUM_8
+
+// MQTT 配置 - 连接到MQTT服务器的设置
+#define MQTT_URI       "mqtt://106.53.179.231:1883"  // MQTT服务器地址和端口
+#define CLIENT_ID      "ESP32-xiaozhi-V2"            // 设备唯一标识符
+#define MQTT_USERNAME  "admin"                       // MQTT服务器用户名
+#define MQTT_PASSWORD  "azsxdcfv"                    // MQTT服务器密码
+#define MQTT_COMMAND_TOPIC    "HA-XZ-01/01/state"    // 统一命令主题
 
 #endif // _BOARD_CONFIG_H_
