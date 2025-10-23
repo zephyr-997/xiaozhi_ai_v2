@@ -285,7 +285,7 @@
 
 // ==================== 物联网外设配置 ====================
 
-// MCP 测试: 灯控制
+// 灯光 GPIO 定义
 #define LAMP_GPIO GPIO_NUM_18
 
 // 风扇 GPIO 定义
@@ -304,6 +304,11 @@
 #define MQTT_HA_FAN_COMMAND_TOPIC           "XZ-ESP32-01/fan/set"                       // 风扇开关命令主题（接收）
 #define MQTT_HA_FAN_PERCENTAGE_COMMAND_TOPIC "XZ-ESP32-01/fan/percentage/set"           // 风扇速度命令主题（接收）
 #define MQTT_HA_FAN_ATTRIBUTES_TOPIC        "XZ-ESP32-01/fan/attributes"                // 风扇属性主题
+
+// 灯光 MQTT 主题
+#define MQTT_HA_LAMP_CONFIG_TOPIC           "homeassistant/light/XZ-ESP32-01/lamp/config"  // 灯光配置主题
+#define MQTT_HA_LAMP_STATE_TOPIC            "XZ-ESP32-01/lamp/state"                       // 灯光状态主题
+#define MQTT_HA_LAMP_COMMAND_TOPIC          "XZ-ESP32-01/lamp/set"                         // 灯光命令主题（接收）
 
 // 设备信息
 #define DEVICE_ID          "XZ-ESP32-01"       // 设备唯一标识符

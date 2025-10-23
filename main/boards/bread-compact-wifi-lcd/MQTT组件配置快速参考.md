@@ -1,4 +1,8 @@
-# Home Assistant MQTT 组件配置快速参考
+# MQTT 快速参考
+
+> 💡 **完整文档**: 查看 [MQTT_完整指南.md](MQTT_完整指南.md) 获取详细说明
+
+---
 
 ## 🎯 核心问题：Fan vs Sensor
 
@@ -184,6 +188,96 @@ mosquitto_pub -h IP -p 1883 -u USER -P PASS \
 
 ---
 
+## 💡 灯光控制配置
+
+### Home Assistant Light 组件配置
+
+**主题**: `homeassistant/light/XZ-ESP32-01/lamp/config`
+
+**特点**: ✅ 支持双向控制（HA ↔️ ESP32）
+
+```json
+{
+  "unique_id": "XZ-ESP32-01-lamp",
+  "name": "小智灯光",
+  "icon": "mdi:lightbulb",
+  
+  "command_topic": "XZ-ESP32-01/lamp/set",
+  "state_topic": "XZ-ESP32-01/lamp/state",
+  "state_value_template": "{{ value_json.state }}",
+  
+  "payload_on": "ON",
+  "payload_off": "OFF",
+  
+  "device": {
+    "identifiers": ["XZ-ESP32-01"],
+    "name": "小智 ESP32",
+    "model": "ESP32-S3",
+    "manufacturer": "XiaoZhi",
+    "sw_version": "2.0.3"
+  }
+}
+```
+
+### MQTT 主题说明
+
+| 主题 | 类型 | 说明 |
+|------|------|------|
+| `homeassistant/light/XZ-ESP32-01/lamp/config` | 发布 | 自动发现配置 |
+| `XZ-ESP32-01/lamp/set` | 订阅 | 接收 HA 控制命令 |
+| `XZ-ESP32-01/lamp/state` | 发布 | 报告灯光状态 |
+
+### 状态消息格式
+
+```json
+// 灯光开启
+{"state":"ON"}
+
+// 灯光关闭
+{"state":"OFF"}
+```
+
+### 控制命令格式
+
+Home Assistant 发送：
+```
+主题: XZ-ESP32-01/lamp/set
+内容: "ON"  或  "OFF"
+```
+
+### MCP 工具
+
+| 工具名称 | 说明 | 返回值 |
+|---------|------|--------|
+| `self.lamp.get_state` | 查询灯光状态 | `{"state":"ON"}` |
+| `self.lamp.turn_on` | 打开灯光 | `true` |
+| `self.lamp.turn_off` | 关闭灯光 | `true` |
+
+### 配置文件 (config.h)
+
+```cpp
+// 灯光 GPIO 定义
+#define LAMP_GPIO GPIO_NUM_18
+
+// 灯光 MQTT 主题
+#define MQTT_HA_LAMP_CONFIG_TOPIC   "homeassistant/light/XZ-ESP32-01/lamp/config"
+#define MQTT_HA_LAMP_STATE_TOPIC    "XZ-ESP32-01/lamp/state"
+#define MQTT_HA_LAMP_COMMAND_TOPIC  "XZ-ESP32-01/lamp/set"
+```
+
+### 控制器实现
+
+文件位置: `main/boards/bread-compact-wifi-lcd/lamp_controller.h`
+
+**特性**:
+- ✅ GPIO 输出控制
+- ✅ MCP 工具注册（AI 对话控制）
+- ✅ MQTT 双向控制（HA 界面控制）
+- ✅ 状态自动同步
+- ✅ Home Assistant 自动发现
+
+---
+
 ## ✅ 推荐做法
 
 **当前场景**（只需显示状态）:
@@ -194,5 +288,20 @@ mosquitto_pub -h IP -p 1883 -u USER -P PASS \
 
 ---
 
-详细文档请查看：`HomeAssistant_MQTT组件配置说明.md`
+## 📚 延伸阅读
+
+- **[MQTT_完整指南.md](MQTT_完整指南.md)** - 完整的技术文档
+  - 第一章：快速开始
+  - 第二章：MQTT 控制器使用
+  - 第三章：Home Assistant 组件配置
+  - 第四章：常见问题与解决方案
+  - 第五章：调试与故障排查
+  - 第六章：API 参考
+
+- **[README_MQTT.md](README_MQTT.md)** - 简短入门指南
+
+---
+
+**版本**: v2.0  
+**更新日期**: 2025-10-23
 
