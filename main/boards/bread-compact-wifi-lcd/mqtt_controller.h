@@ -7,10 +7,13 @@
 #include "esp_event.h"
 #include "esp_wifi.h"
 #include <string>
+#include <map>
+#include <functional>
 
 class MqttController {
 private:
     static constexpr const char* TAG = "MqttController";
+    static MqttController* instance_;  // 单例指针
     
     esp_mqtt_client_handle_t mqtt_client_;
     bool is_connected_;
@@ -20,21 +23,38 @@ private:
     std::string username_;
     std::string password_;
     std::string default_topic_;
+    std::map<std::string, std::function<void(const std::string&, const std::string&)>> topic_callbacks_;  // 主题回调映射
 
     // MQTT 事件处理回调
     static void MqttEventHandler(void* handler_args, esp_event_base_t base, 
                                  int32_t event_id, void* event_data) {
         MqttController* controller = static_cast<MqttController*>(handler_args);
-        // esp_mqtt_event_handle_t event = static_cast<esp_mqtt_event_handle_t>(event_data); // 未使用
+        esp_mqtt_event_handle_t event = static_cast<esp_mqtt_event_handle_t>(event_data);
         
         switch ((esp_mqtt_event_id_t)event_id) {
             case MQTT_EVENT_CONNECTED:
                 ESP_LOGI(TAG, "MQTT connected to broker");
                 controller->is_connected_ = true;
+                // 重新订阅所有主题
+                controller->ResubscribeAll();
                 break;
             case MQTT_EVENT_DISCONNECTED:
                 ESP_LOGI(TAG, "MQTT disconnected");
                 controller->is_connected_ = false;
+                break;
+            case MQTT_EVENT_DATA:
+                // 接收到消息
+                {
+                    std::string topic(event->topic, event->topic_len);
+                    std::string payload(event->data, event->data_len);
+                    ESP_LOGI(TAG, "Received message on [%s]: %s", topic.c_str(), payload.c_str());
+                    
+                    // 调用回调函数
+                    auto it = controller->topic_callbacks_.find(topic);
+                    if (it != controller->topic_callbacks_.end()) {
+                        it->second(topic, payload);
+                    }
+                }
                 break;
             case MQTT_EVENT_ERROR:
                 ESP_LOGE(TAG, "MQTT error");
@@ -85,6 +105,17 @@ private:
         esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, WifiEventHandler, this);
         
         ESP_LOGI(TAG, "MQTT client initialized, waiting for WiFi connection...");
+    }
+
+    void ResubscribeAll() {
+        if (!is_connected_) {
+            return;
+        }
+        
+        for (const auto& pair : topic_callbacks_) {
+            int msg_id = esp_mqtt_client_subscribe(mqtt_client_, pair.first.c_str(), 0);
+            ESP_LOGI(TAG, "Resubscribed to topic: %s (msg_id=%d)", pair.first.c_str(), msg_id);
+        }
     }
 
     bool PublishMessage(const char* topic, const char* message) {
@@ -165,6 +196,43 @@ private:
     }
 
 public:
+    // 获取单例实例
+    static MqttController* GetInstance() {
+        return instance_;
+    }
+    
+    // 公共发布接口（供其他控制器调用）
+    bool Publish(const char* topic, const char* message) {
+        return PublishMessage(topic, message);
+    }
+    
+    // 检查是否已连接
+    bool IsConnected() const {
+        return is_connected_;
+    }
+    
+    // 订阅主题（供其他控制器调用）
+    bool Subscribe(const char* topic, std::function<void(const std::string&, const std::string&)> callback) {
+        std::string topic_str(topic);
+        
+        // 保存回调
+        topic_callbacks_[topic_str] = callback;
+        
+        // 如果已连接，立即订阅
+        if (is_connected_) {
+            int msg_id = esp_mqtt_client_subscribe(mqtt_client_, topic, 0);
+            if (msg_id < 0) {
+                ESP_LOGE(TAG, "Failed to subscribe to topic: %s", topic);
+                return false;
+            }
+            ESP_LOGI(TAG, "Subscribed to topic: %s (msg_id=%d)", topic, msg_id);
+            return true;
+        } else {
+            ESP_LOGW(TAG, "Not connected, subscription will be done when connected: %s", topic);
+            return true;  // 稍后连接时会自动订阅
+        }
+    }
+    
     explicit MqttController(const char* broker_uri, 
                            const char* client_id,
                            const char* username,
@@ -178,6 +246,7 @@ public:
           username_(username),
           password_(password),
           default_topic_(default_topic) {
+        instance_ = this;  // 设置单例
         InitializeMqttClient();
         RegisterTools();
         ESP_LOGI(TAG, "MQTT Controller initialized - Broker: %s, Client: %s, Topic: %s", 
@@ -203,6 +272,9 @@ public:
     MqttController(const MqttController&) = delete;
     MqttController& operator=(const MqttController&) = delete;
 };
+
+// 静态成员初始化
+MqttController* MqttController::instance_ = nullptr;
 
 #endif // __MQTT_CONTROLLER_H__
 

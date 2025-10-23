@@ -298,4 +298,16 @@
 #define MQTT_PASSWORD  "azsxdcfv"                    // MQTT服务器密码
 #define MQTT_COMMAND_TOPIC    "HA-XZ-01/01/state"    // 统一命令主题
 
+// Home Assistant MQTT 自动发现主题
+#define MQTT_HA_FAN_CONFIG_TOPIC            "homeassistant/fan/XZ-ESP32-01/fan/config"  // 风扇配置主题
+#define MQTT_HA_FAN_STATE_TOPIC             "XZ-ESP32-01/fan/state"                     // 风扇状态主题
+#define MQTT_HA_FAN_COMMAND_TOPIC           "XZ-ESP32-01/fan/set"                       // 风扇开关命令主题（接收）
+#define MQTT_HA_FAN_PERCENTAGE_COMMAND_TOPIC "XZ-ESP32-01/fan/percentage/set"           // 风扇速度命令主题（接收）
+#define MQTT_HA_FAN_ATTRIBUTES_TOPIC        "XZ-ESP32-01/fan/attributes"                // 风扇属性主题
+
+// 设备信息
+#define DEVICE_ID          "XZ-ESP32-01"       // 设备唯一标识符
+#define DEVICE_NAME        "小智 ESP32"        // 设备显示名称
+#define DEVICE_SW_VERSION  "2.0.3"             // 软件版本
+
 #endif // _BOARD_CONFIG_H_
