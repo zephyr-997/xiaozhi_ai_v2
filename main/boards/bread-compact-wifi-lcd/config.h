@@ -291,6 +291,19 @@
 // 风扇 GPIO 定义
 #define FAN_GPIO GPIO_NUM_8
 
+// 温湿度传感器 GPIO 定义
+#define DHT11_GPIO GPIO_NUM_3
+
+// DHT11 参数配置
+#define DHT11_READ_INTERVAL_MS  5000  // 后台读取间隔 5 秒
+#define DHT11_TASK_STACK_SIZE   4096  // 后台任务栈大小
+#define DHT11_TASK_PRIORITY     5     // 后台任务优先级
+
+// DHT11 MQTT 主题
+#define MQTT_HA_DHT11_STATE_TOPIC         "XZ-ESP32-01/sensor/dht11/state"
+#define MQTT_HA_DHT11_TEMP_CONFIG_TOPIC   "homeassistant/sensor/XZ-ESP32-01/dht11_temp/config"
+#define MQTT_HA_DHT11_HUMI_CONFIG_TOPIC   "homeassistant/sensor/XZ-ESP32-01/dht11_humi/config"
+
 // MQTT 配置 - 连接到MQTT服务器的设置
 #define MQTT_URI       "mqtt://106.53.179.231:1883"  // MQTT服务器地址和端口
 #define CLIENT_ID      "ESP32-xiaozhi-V2"            // 设备唯一标识符
