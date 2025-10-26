@@ -286,7 +286,7 @@
 // ==================== 物联网外设配置 ====================
 
 // 灯光 GPIO 定义
-#define LAMP_GPIO GPIO_NUM_18
+#define LAMP_GPIO GPIO_NUM_1
 
 // 风扇 GPIO 定义
 #define FAN_GPIO GPIO_NUM_8
@@ -298,6 +298,21 @@
 #define DHT11_READ_INTERVAL_MS  5000  // 后台读取间隔 5 秒
 #define DHT11_TASK_STACK_SIZE   4096  // 后台任务栈大小
 #define DHT11_TASK_PRIORITY     5     // 后台任务优先级
+
+// UART1 配置， 烧录已经默认使用U0
+#define UART1_TX_GPIO           GPIO_NUM_17
+#define UART1_RX_GPIO           GPIO_NUM_18
+#define UART1_BAUD_RATE         115200
+#define UART1_RX_BUFFER_SIZE    512
+#define UART1_TX_BUFFER_SIZE    256
+#define UART1_RX_TASK_STACK_SIZE 4096
+#define UART1_RX_TASK_PRIORITY   8
+#define UART1_READ_TIMEOUT_MS    50
+// UART 控制器内部限制
+#define UART1_CONTROLLER_SEND_MAX_LEN     256
+#define UART1_CONTROLLER_MUTEX_TIMEOUT_MS 1000
+#define UART1_CONTROLLER_RECEIVE_MAX_LEN  UART1_RX_BUFFER_SIZE
+#define UART1_CONTROLLER_RECEIVE_DEFAULT_LEN 128
 
 // DHT11 MQTT 主题
 #define MQTT_HA_DHT11_STATE_TOPIC         "XZ-ESP32-01/sensor/dht11/state"
