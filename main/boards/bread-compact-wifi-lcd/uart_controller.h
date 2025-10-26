@@ -11,6 +11,7 @@
 #include <string>
 #include "config.h"
 #include "esp_log.h"
+#include "uart_service.h"
 
 class UartController {
 private:
@@ -51,26 +52,36 @@ private:
         static_cast<UartController*>(arg)->RxTaskLoop();
     }
 
-    // 后台读取串口数据并缓存最近一帧
+    // 后台读取串口数据，缓存并解析 K65 协议帧
     void RxTaskLoop() {
         uint8_t* data = static_cast<uint8_t*>(malloc(UART1_RX_BUFFER_SIZE));
         if (data == nullptr) {
-            ESP_LOGE(TAG, "Failed to allocate UART0 RX buffer");
+            ESP_LOGE(TAG, "Failed to allocate UART1 RX buffer");
             vTaskDelete(nullptr);
             return;
         }
 
+        UartService parser;
+
         while (true) {
-            int length = uart_read_bytes(uart_port_, data, UART1_RX_BUFFER_SIZE - 1, pdMS_TO_TICKS(UART1_READ_TIMEOUT_MS));
+            int length = uart_read_bytes(uart_port_, data, UART1_RX_BUFFER_SIZE, pdMS_TO_TICKS(UART1_READ_TIMEOUT_MS));
             if (length > 0) {
-                data[length] = '\0';
                 if (xSemaphoreTake(rx_buffer_mutex_, portMAX_DELAY) == pdTRUE) {
                     last_message_.assign(reinterpret_cast<char*>(data), length);
                     xSemaphoreGive(rx_buffer_mutex_);
                 }
-                ESP_LOGI(TAG, "UART0 RX %d bytes: %s", length, reinterpret_cast<char*>(data));
-                // 将收到的数据直接回传
-                SendMessage(last_message_);
+                ESP_LOGI(TAG, "UART1 RX %d bytes", length);
+
+                auto frame = parser.Parse(data, static_cast<size_t>(length));
+                if (frame.has_value()) {
+                    ESP_LOGI(TAG, "Parsed frame payload: %02X %02X %02X", frame->field1, frame->field2, frame->field3);
+
+                    char response[48];
+                    snprintf(response, sizeof(response), "PARSED:%02X%02X%02X\r\n", frame->field1, frame->field2, frame->field3);
+                    SendMessage(response); //发送解析后的数据到上位机
+                } else {
+                    ESP_LOGW(TAG, "Discard invalid UART frame");
+                }
             }
         }
     }
@@ -94,12 +105,12 @@ private:
     // 向串口发送数据，带互斥保护
     bool SendMessage(const std::string& message) {
         if (message.length() > UART1_CONTROLLER_SEND_MAX_LEN) {
-            ESP_LOGW(TAG, "UART0 message too long: %u", static_cast<unsigned>(message.length()));
+            ESP_LOGW(TAG, "UART1 message too long: %u", static_cast<unsigned>(message.length()));
             return false;
         }
 
         if (xSemaphoreTake(tx_mutex_, pdMS_TO_TICKS(UART1_CONTROLLER_MUTEX_TIMEOUT_MS)) != pdTRUE) {
-            ESP_LOGE(TAG, "UART0 TX mutex timeout");
+            ESP_LOGE(TAG, "UART1 TX mutex timeout");
             return false;
         }
 
@@ -109,7 +120,7 @@ private:
             xSemaphoreGive(tx_mutex_);
             return false;
         }
-        ESP_LOGI(TAG, "UART0 TX %d bytes", written);
+        ESP_LOGI(TAG, "UART1 TX %d bytes", written);
         xSemaphoreGive(tx_mutex_);
 
         return true;
