@@ -7,9 +7,13 @@
 #include "config.h"
 #include "esp_log.h"
 
+// 前向声明，避免循环依赖
+class UartController;
+
 class LampController {
 private:
     static constexpr const char* TAG = "LampController";
+    inline static LampController* instance_ = nullptr;
 
     gpio_num_t lamp_gpio_;
     bool power_state_;  // true=开, false=关
@@ -89,7 +93,10 @@ private:
         mqtt->Publish(MQTT_HA_LAMP_STATE_TOPIC, state_json);
         ESP_LOGI(TAG, "Published lamp state: %s", state_json);
     }
-    
+
+    // 串口反馈函数声明（实现在 uart_controller.h 包含后）
+    void SendLampUartFeedback(bool state);
+
     void SetPower(bool state) {
         power_state_ = state;
         gpio_set_level(lamp_gpio_, state ? 1 : 0);
@@ -97,8 +104,13 @@ private:
         // 发送 MQTT 状态更新
         PublishLampState();
         
+        // 发送串口状态反馈（实际实现在包含 uart_controller.h 后）
+        SendLampUartFeedback(state);
+        
         ESP_LOGI(TAG, "Lamp %s", state ? "ON" : "OFF");
     }
+    
+
     
     // 处理 Home Assistant 发来的开关命令
     void HandleCommand(const std::string& payload) {
@@ -184,6 +196,32 @@ public:
         InitializeGpio();
         RegisterTools();
         ESP_LOGI(TAG, "Initialized lamp controller on GPIO %d", lamp_gpio_);
+        instance_ = this;
+    }
+
+    /**
+     * @brief 获取当前灯光控制器单例。
+     */
+    static LampController* GetInstance() {
+        return instance_;
+    }
+
+    /**
+     * @brief 直接打开灯光，供外设联动调用。
+     */
+    bool TurnOnDirect() {
+        SetPower(true);
+        ESP_LOGI(TAG, "Lamp turned on via direct command");
+        return true;
+    }
+
+    /**
+     * @brief 直接关闭灯光，供外设联动调用。
+     */
+    bool TurnOffDirect() {
+        SetPower(false);
+        ESP_LOGI(TAG, "Lamp turned off via direct command");
+        return true;
     }
 };
 

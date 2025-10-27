@@ -9,9 +9,13 @@
 #include "config.h"
 #include "esp_log.h"
 
+// 前向声明，避免与 uart_controller.h 循环依赖
+class UartController;
+
 class FanController {
 private:
     static constexpr const char* TAG = "FanController";
+    inline static FanController* instance_ = nullptr;
 
     gpio_num_t fan_gpio_;
     uint8_t speed_level_;  // 0=关闭, 1=一档(33%), 2=二档(67%), 3=三档(100%)
@@ -148,6 +152,9 @@ private:
         ESP_LOGD(TAG, "Published fan attributes");
     }*/
 
+    // 发送串口反馈（在 uart_controller.h 中实现）
+    void SendFanUartFeedback(bool is_on);
+
     void SetSpeed(uint8_t level) {
         if (level > 3) {
             level = 3;
@@ -167,6 +174,9 @@ private:
         
         // 发送 MQTT 状态更新
         PublishFanState();
+
+        // 发送串口状态反馈
+        SendFanUartFeedback(speed_level_ > 0);
     }
     
     // 处理 Home Assistant 发来的开关命令
@@ -289,6 +299,32 @@ public:
         ConfigurePwm();
         RegisterTools();
         ESP_LOGI(TAG, "Initialized 3-speed PWM fan controller on GPIO %d (25kHz)", fan_gpio_);
+        instance_ = this;
+    }
+
+    /**
+     * @brief 获取当前风扇控制器单例。
+     */
+    static FanController* GetInstance() {
+        return instance_;
+    }
+
+    /**
+     * @brief 以默认二档速度开启风扇，用于外设联动。
+     */
+    bool TurnOnDefaultLevel() {
+        SetSpeed(2);
+        ESP_LOGI(TAG, "Fan turned on (default level 2) via direct command");
+        return true;
+    }
+
+    /**
+     * @brief 关闭风扇，用于外设联动。
+     */
+    bool TurnOffDirect() {
+        SetSpeed(0);
+        ESP_LOGI(TAG, "Fan turned off via direct command");
+        return true;
     }
 };
 

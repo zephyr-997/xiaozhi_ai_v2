@@ -12,6 +12,8 @@
 #include "config.h"
 #include "esp_log.h"
 #include "uart_service.h"
+#include "fan_controller.h"
+#include "lamp_controller.h"
 
 class UartController {
 private:
@@ -75,6 +77,38 @@ private:
                 auto frame = parser.Parse(data, static_cast<size_t>(length));
                 if (frame.has_value()) {
                     ESP_LOGI(TAG, "Parsed frame payload: %02X %02X %02X", frame->field1, frame->field2, frame->field3);
+
+                    if (frame->field1 == 0x01 && frame->field2 == 0x02) { //风扇控制指令
+                        FanController* fan = FanController::GetInstance();
+                        if (fan != nullptr) {
+                            bool result = false;
+                            if (frame->field3 == 0x01) {
+                                result = fan->TurnOnDefaultLevel();
+                            } else if (frame->field3 == 0x02) {
+                                result = fan->TurnOffDirect();
+                            } else {
+                                ESP_LOGW(TAG, "Unknown fan control value: 0x%02X", frame->field3);
+                            }
+                            ESP_LOGI(TAG, "Fan control result: %s", result ? "success" : "failed");
+                        } else {
+                            ESP_LOGW(TAG, "FanController instance not available");
+                        }
+                    } else if (frame->field1 == 0x01 && frame->field2 == 0x01) { //灯光控制指令
+                        LampController* lamp = LampController::GetInstance();
+                        if (lamp != nullptr) {
+                            bool result = false;
+                            if (frame->field3 == 0x01) {
+                                result = lamp->TurnOnDirect();
+                            } else if (frame->field3 == 0x02) {
+                                result = lamp->TurnOffDirect();
+                            } else {
+                                ESP_LOGW(TAG, "Unknown lamp control value: 0x%02X", frame->field3);
+                            }
+                            ESP_LOGI(TAG, "Lamp control result: %s", result ? "success" : "failed");
+                        } else {
+                            ESP_LOGW(TAG, "LampController instance not available");
+                        }
+                    }
 
                     char response[48];
                     snprintf(response, sizeof(response), "PARSED:%02X%02X%02X\r\n", frame->field1, frame->field2, frame->field3);
@@ -216,5 +250,29 @@ public:
         return instance_;
     }
 };
+
+// 为 LampController 提供串口反馈实现（在 UartController 完整定义之后）
+inline void LampController::SendLampUartFeedback(bool state) {
+    UartController* uart = UartController::GetInstance();
+    if (uart != nullptr) {
+        const char* uart_msg = state ? "a=1" : "a=2";
+        uart->Send(uart_msg);
+        ESP_LOGI(TAG, "Sent UART feedback: %s", uart_msg);
+    } else {
+        ESP_LOGD(TAG, "UART not ready, skip feedback");
+    }
+}
+
+// 为 FanController 提供串口反馈实现
+inline void FanController::SendFanUartFeedback(bool is_on) {
+    UartController* uart = UartController::GetInstance();
+    if (uart != nullptr) {
+        const char* uart_msg = is_on ? "a=5" : "a=6";
+        uart->Send(uart_msg);
+        ESP_LOGI(TAG, "Sent UART fan feedback: %s", uart_msg);
+    } else {
+        ESP_LOGD(TAG, "UART not ready, skip fan feedback");
+    }
+}
 
 #endif // __UART_CONTROLLER_H__
