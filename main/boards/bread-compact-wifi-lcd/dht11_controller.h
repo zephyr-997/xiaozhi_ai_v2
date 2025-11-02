@@ -9,6 +9,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "rom/ets_sys.h"
+#include "uart_controller.h" 
+
 
 class Dht11Controller {
 private:
@@ -177,6 +179,45 @@ private:
         ESP_LOGD(TAG, "Published to MQTT: %s", state_json);
     }
     
+    /**
+     * @brief 通过串口发送温湿度数据到上位机。
+     *
+     * 发送格式：
+     * - saver.t2.txt="湿度值"
+     * - saver.t1.txt="温度值"
+     * - main.t1.txt="温度值"
+     * 
+     * 每行数据以 \r\n 结尾。
+     */
+    void PublishToUart() {
+        // 获取 UartController 单例（需要在 esp32_bread_board_lcd.cc 中包含 uart_controller.h）
+        UartController* uart = UartController::GetInstance();
+        if (uart == nullptr) {
+            ESP_LOGD(TAG, "UART not ready, skip publishing");
+            return;
+        }
+        
+        // 准备三行数据
+        char line1[64];
+        char line2[64];
+        char line3[64];
+        
+        snprintf(line1, sizeof(line1), "saver.t2.txt=\"%d\"\r\n", static_cast<int>(humidity_));
+        snprintf(line2, sizeof(line2), "saver.t1.txt=\"%d\"\r\n", static_cast<int>(temperature_));
+        snprintf(line3, sizeof(line3), "main.t1.txt=\"%d\"\r\n", static_cast<int>(temperature_));
+        
+        // 发送到串口
+        bool success = uart->Send(line1);
+        success &= uart->Send(line2);
+        success &= uart->Send(line3);
+        
+        if (success) {
+            ESP_LOGD(TAG, "Published to UART: Temp=%.1f°C, Humi=%.1f%%", temperature_, humidity_);
+        } else {
+            ESP_LOGW(TAG, "Failed to publish to UART");
+        }
+    }
+    
     void PublishHAConfig() {
         MqttController* mqtt = MqttController::GetInstance();
         if (mqtt == nullptr) {
@@ -285,6 +326,9 @@ private:
                 
                 // 发送到 MQTT
                 controller->PublishToMqtt();
+                
+                // 发送到 UART
+                controller->PublishToUart();
                 
                 ESP_LOGI(TAG, "Background read OK: Temp=%.1f°C, Humi=%.1f%%", 
                          controller->temperature_, controller->humidity_);

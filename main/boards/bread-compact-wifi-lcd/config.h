@@ -2,6 +2,7 @@
 #define _BOARD_CONFIG_H_
 
 #include <driver/gpio.h>
+#include <esp_adc/adc_oneshot.h>
 
 #define AUDIO_INPUT_SAMPLE_RATE  16000
 #define AUDIO_OUTPUT_SAMPLE_RATE 24000
@@ -299,6 +300,17 @@
 #define DHT11_TASK_STACK_SIZE   4096  // 后台任务栈大小
 #define DHT11_TASK_PRIORITY     5     // 后台任务优先级
 
+// MQ-2 烟雾传感器 ADC 配置
+#define MQ2_ADC_UNIT            ADC_UNIT_2       // GPIO14 对应 ADC2 单元
+#define MQ2_ADC_CHANNEL         ADC_CHANNEL_3    // GPIO14 对应 ADC2 通道 3
+#define MQ2_READ_TIMES          10               // 多次采样取平均
+#define MQ2_READ_INTERVAL_MS    5000             // 后台读取间隔 5 秒
+#define MQ2_TASK_STACK_SIZE     4096             // 后台任务栈大小
+#define MQ2_TASK_PRIORITY       5                // 后台任务优先级
+#define MQ2_PREHEAT_TIME_MS     5000             // 预热时间 5 秒（实际建议更长）
+#define MQ2_R0_VALUE            30.0f            // 清洁空气下校准的 R0 值需现场调校
+#define MQ2_ALERT_THRESHOLD     100.0f           // 告警阈值 (PPM)
+
 // UART1 配置， 烧录已经默认使用U0
 #define UART1_TX_GPIO           GPIO_NUM_17
 #define UART1_RX_GPIO           GPIO_NUM_18
@@ -318,6 +330,11 @@
 #define MQTT_HA_DHT11_STATE_TOPIC         "XZ-ESP32-01/sensor/dht11/state"
 #define MQTT_HA_DHT11_TEMP_CONFIG_TOPIC   "homeassistant/sensor/XZ-ESP32-01/dht11_temp/config"
 #define MQTT_HA_DHT11_HUMI_CONFIG_TOPIC   "homeassistant/sensor/XZ-ESP32-01/dht11_humi/config"
+
+// MQ-2 烟雾传感器 MQTT 主题
+#define MQTT_HA_MQ2_STATE_TOPIC           "XZ-ESP32-01/sensor/mq2/state"
+#define MQTT_HA_MQ2_CONFIG_TOPIC          "homeassistant/sensor/XZ-ESP32-01/mq2_smoke/config"
+#define MQTT_HA_MQ2_ALERT_CONFIG_TOPIC    "homeassistant/binary_sensor/XZ-ESP32-01/mq2_alert/config"
 
 // MQTT 配置 - 连接到MQTT服务器的设置
 #define MQTT_URI       "mqtt://106.53.179.231:1883"  // MQTT服务器地址和端口

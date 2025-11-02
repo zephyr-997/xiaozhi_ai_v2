@@ -9,6 +9,7 @@
 #include "lamp_controller.h"
 #include "fan_controller.h"
 #include "dht11_controller.h"
+#include "mq2_controller.h"
 #include "mqtt_controller.h"
 #include "uart_controller.h"
 #include "led/single_led.h"
@@ -142,9 +143,10 @@ private:
         static LampController lamp(LAMP_GPIO);
         static FanController fan(FAN_GPIO);
         static Dht11Controller dht11(DHT11_GPIO);
+        static Mq2Controller mq2(MQ2_ADC_UNIT, MQ2_ADC_CHANNEL);
         static MqttController mqtt(MQTT_URI, CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD, MQTT_COMMAND_TOPIC);
         static UartController uart1(UART_NUM_1, UART1_TX_GPIO, UART1_RX_GPIO, UART1_BAUD_RATE);
-        ESP_LOGI(TAG, "IoT peripherals initialized (Lamp, Fan, DHT11, MQTT, UART1)");
+        ESP_LOGI(TAG, "IoT peripherals initialized (Lamp, Fan, DHT11, MQ-2, MQTT, UART1)");
     }
 
 public:
