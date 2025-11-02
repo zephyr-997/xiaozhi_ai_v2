@@ -15,6 +15,8 @@
 #include "mcp_server.h"
 #include "mqtt_controller.h"
 #include "uart_controller.h"
+#include "fan_controller.h"
+#include "lamp_controller.h"
 
 class Mq2Controller {
 private:
@@ -32,6 +34,7 @@ private:
     uint32_t last_read_time_;
     bool last_read_success_;
     TaskHandle_t read_task_handle_;
+    bool last_alert_state_;
 
     void InitAdc() {
         adc_oneshot_unit_init_cfg_t init_config = {
@@ -270,6 +273,27 @@ private:
                 controller->PublishToMqtt();
                 controller->PublishToUart();
 
+                bool current_alert = controller->sensor_alert_;
+
+                if (current_alert && !controller->last_alert_state_) {
+                    ESP_LOGW(TAG, "Smoke alert detected, activating fan at max speed");
+                    FanController* fan = FanController::GetInstance();
+                    if (fan != nullptr) {
+                        fan->SetSpeedLevel(3);
+                    } else {
+                        ESP_LOGW(TAG, "FanController not available for smoke alert handling");
+                    }
+
+                    LampController* lamp = LampController::GetInstance();
+                    if (lamp != nullptr) {
+                        lamp->TurnOnDirect();
+                    } else {
+                        ESP_LOGW(TAG, "LampController not available for smoke alert handling");
+                    }
+                }
+
+                controller->last_alert_state_ = current_alert;
+
                 ESP_LOGI(TAG, "Background read OK: PPM=%.2f, Alert=%s",
                          controller->ppm_, controller->sensor_alert_ ? "YES" : "NO");
 
@@ -348,7 +372,8 @@ public:
           sensor_alert_(false),
           last_read_time_(0),
           last_read_success_(false),
-          read_task_handle_(nullptr) {
+          read_task_handle_(nullptr),
+          last_alert_state_(false) {
 
         ESP_LOGI(TAG, "Initializing MQ-2 on ADC unit %d channel %d...", adc_unit, adc_channel);
         InitAdc();

@@ -310,6 +310,18 @@ public:
     }
 
     /**
+     * @brief 设置风扇档位，用于外设联动。
+     *
+     * @param level 目标档位，0 表示关闭，1-3 表示不同风速。
+     * @return true 始终返回成功。
+     */
+    bool SetSpeedLevel(uint8_t level) {
+        SetSpeed(level);
+        ESP_LOGI(TAG, "Fan speed set via direct command to level %d", speed_level_);
+        return true;
+    }
+
+    /**
      * @brief 以默认二档速度开启风扇，用于外设联动。
      */
     bool TurnOnDefaultLevel() {
