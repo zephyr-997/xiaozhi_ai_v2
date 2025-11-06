@@ -311,6 +311,18 @@
 #define MQ2_R0_VALUE            30.0f            // 清洁空气下校准的 R0 值需现场调校
 #define MQ2_ALERT_THRESHOLD     100.0f           // 告警阈值 (PPM)
 
+// 窗帘控制器（步进电机）GPIO 定义
+#define CURTAIN_IN1_GPIO  GPIO_NUM_9
+#define CURTAIN_IN2_GPIO  GPIO_NUM_10
+#define CURTAIN_IN3_GPIO  GPIO_NUM_11
+#define CURTAIN_IN4_GPIO  GPIO_NUM_12
+
+// 窗帘控制器参数配置
+#define CURTAIN_STEPS_PER_TURN    4096    // 28BYJ-48 一圈步数（360°）
+#define CURTAIN_TASK_STACK_SIZE   4096    // 后台任务栈大小
+#define CURTAIN_TASK_PRIORITY     6       // 后台任务优先级
+#define CURTAIN_SPEED_MS          2       // 每步延时(ms)，推荐 2-5ms
+
 // UART1 配置， 烧录已经默认使用U0
 #define UART1_TX_GPIO           GPIO_NUM_17
 #define UART1_RX_GPIO           GPIO_NUM_18
