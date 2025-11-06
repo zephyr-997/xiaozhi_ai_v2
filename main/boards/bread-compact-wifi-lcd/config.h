@@ -367,6 +367,11 @@
 #define MQTT_HA_LAMP_STATE_TOPIC            "XZ-ESP32-01/lamp/state"                       // 灯光状态主题
 #define MQTT_HA_LAMP_COMMAND_TOPIC          "XZ-ESP32-01/lamp/set"                         // 灯光命令主题（接收）
 
+// 窗帘 MQTT 主题
+#define MQTT_HA_CURTAIN_CONFIG_TOPIC        "homeassistant/cover/XZ-ESP32-01/curtain/config"  // 窗帘配置主题
+#define MQTT_HA_CURTAIN_STATE_TOPIC         "XZ-ESP32-01/curtain/state"                        // 窗帘状态主题
+#define MQTT_HA_CURTAIN_COMMAND_TOPIC       "XZ-ESP32-01/curtain/set"                          // 窗帘命令主题（接收）
+
 // 设备信息
 #define DEVICE_ID          "XZ-ESP32-01"       // 设备唯一标识符
 #define DEVICE_NAME        "小智 ESP32"        // 设备显示名称

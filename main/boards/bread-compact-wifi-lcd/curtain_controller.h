@@ -6,6 +6,7 @@
 #include <freertos/task.h>
 #include <freertos/queue.h>
 #include "mcp_server.h"
+#include "mqtt_controller.h"
 #include "config.h"
 #include "esp_log.h"
 
@@ -130,10 +131,12 @@ private:
                     controller->PowerOff();
                     controller->is_running_ = false;
                     controller->current_state_ = CURTAIN_UNKNOWN;
+                    controller->PublishCurtainState();  // 发布停止状态
                     continue;
                 }
                 
                 controller->is_running_ = true;
+                controller->PublishCurtainState();  // 发布运行中状态（opening/closing）
                 
                 // 确定方向（打开=逆时针，关闭=顺时针）
                 bool clockwise = (cmd.type == CMD_CLOSE);
@@ -172,6 +175,7 @@ private:
                 controller->current_state_ = aborted
                     ? CURTAIN_UNKNOWN
                     : (cmd.type == CMD_OPEN ? CURTAIN_OPEN : CURTAIN_CLOSED);
+                controller->PublishCurtainState();  // 发布完成状态（open/closed/unknown）
                 ESP_LOGI(TAG, "Curtain operation %s", aborted ? "aborted" : "completed");
             }
         }
@@ -212,6 +216,135 @@ private:
     }
     
     /**
+     * @brief 发送 Home Assistant 配置消息（自动发现）。
+     */
+    void PublishHAConfig() {
+        MqttController* mqtt = MqttController::GetInstance();
+        if (mqtt == nullptr || !mqtt->IsConnected()) {
+            ESP_LOGW(TAG, "MQTT not ready, skip HA config");
+            return;
+        }
+        
+        // 构建 Home Assistant MQTT Cover 配置 JSON（简化版，无位置控制）
+        char config_json[1024];
+        snprintf(config_json, sizeof(config_json),
+            "{\n"
+            "  \"unique_id\": \"%s-curtain\",\n"
+            "  \"name\": \"小智窗帘\",\n"
+            "  \"icon\": \"mdi:curtains\",\n"
+            "  \n"
+            "  \"command_topic\": \"%s\",\n"
+            "  \"state_topic\": \"%s\",\n"
+            "  \n"
+            "  \"payload_open\": \"OPEN\",\n"
+            "  \"payload_close\": \"CLOSE\",\n"
+            "  \"payload_stop\": \"STOP\",\n"
+            "  \n"
+            "  \"state_open\": \"open\",\n"
+            "  \"state_closed\": \"closed\",\n"
+            "  \"state_opening\": \"opening\",\n"
+            "  \"state_closing\": \"closing\",\n"
+            "  \n"
+            "  \"device_class\": \"curtain\",\n"
+            "  \"optimistic\": false,\n"
+            "  \n"
+            "  \"device\": {\n"
+            "    \"identifiers\": [\"%s\"],\n"
+            "    \"name\": \"%s\",\n"
+            "    \"model\": \"ESP32-S3\",\n"
+            "    \"manufacturer\": \"XiaoZhi\",\n"
+            "    \"sw_version\": \"%s\"\n"
+            "  }\n"
+            "}",
+            DEVICE_ID,
+            MQTT_HA_CURTAIN_COMMAND_TOPIC,
+            MQTT_HA_CURTAIN_STATE_TOPIC,
+            DEVICE_ID,
+            DEVICE_NAME,
+            DEVICE_SW_VERSION
+        );
+        
+        mqtt->Publish(MQTT_HA_CURTAIN_CONFIG_TOPIC, config_json);
+        ESP_LOGI(TAG, "Published HA config to %s", MQTT_HA_CURTAIN_CONFIG_TOPIC);
+    }
+
+    /**
+     * @brief 发送窗帘状态到 MQTT（符合 HA Cover 标准格式）。
+     */
+    void PublishCurtainState() {
+        MqttController* mqtt = MqttController::GetInstance();
+        if (mqtt == nullptr || !mqtt->IsConnected()) {
+            ESP_LOGD(TAG, "MQTT not ready, skip state publish");
+            return;
+        }
+        
+        // 确定状态字符串
+        const char* state_str = "unknown";
+        if (is_running_) {
+            // 根据当前状态判断是正在打开还是关闭
+            state_str = (current_state_ == CURTAIN_CLOSED) ? "opening" : "closing";
+        } else {
+            switch (current_state_) {
+                case CURTAIN_OPEN: state_str = "open"; break;
+                case CURTAIN_CLOSED: state_str = "closed"; break;
+                case CURTAIN_UNKNOWN: default: state_str = "unknown"; break;
+            }
+        }
+        
+        mqtt->Publish(MQTT_HA_CURTAIN_STATE_TOPIC, state_str);
+        ESP_LOGI(TAG, "Published curtain state: %s", state_str);
+    }
+
+    /**
+     * @brief 处理 Home Assistant 发来的命令。
+     */
+    void HandleCommand(const std::string& payload) {
+        ESP_LOGI(TAG, "Received MQTT command: %s", payload.c_str());
+        
+        if (payload == "OPEN") {
+            if (is_running_) {
+                ESP_LOGW(TAG, "Curtain is running, ignoring command");
+                return;
+            }
+            Command cmd = {CMD_OPEN};
+            SendCommand(cmd);
+            ESP_LOGI(TAG, "Curtain opening via MQTT");
+        } else if (payload == "CLOSE") {
+            if (is_running_) {
+                ESP_LOGW(TAG, "Curtain is running, ignoring command");
+                return;
+            }
+            Command cmd = {CMD_CLOSE};
+            SendCommand(cmd);
+            ESP_LOGI(TAG, "Curtain closing via MQTT");
+        } else if (payload == "STOP") {
+            Command cmd = {CMD_STOP};
+            SendCommand(cmd);
+            ESP_LOGI(TAG, "Curtain stopped via MQTT");
+        } else {
+            ESP_LOGW(TAG, "Unknown MQTT command: %s", payload.c_str());
+        }
+    }
+
+    /**
+     * @brief 订阅 MQTT 命令主题。
+     */
+    void SubscribeCommands() {
+        MqttController* mqtt = MqttController::GetInstance();
+        if (mqtt == nullptr) {
+            ESP_LOGW(TAG, "MQTT instance not available");
+            return;
+        }
+        
+        // 订阅开关/停止命令
+        mqtt->Subscribe(MQTT_HA_CURTAIN_COMMAND_TOPIC, 
+            [this](const std::string& topic, const std::string& payload) {
+                this->HandleCommand(payload);
+            });
+        ESP_LOGI(TAG, "Subscribed to %s", MQTT_HA_CURTAIN_COMMAND_TOPIC);
+    }
+    
+    /**
      * @brief 注册 MCP 工具。
      */
     void RegisterTools() {
@@ -220,7 +353,7 @@ private:
         // 1. 开窗帘
         mcp_server.AddTool(
             "self.curtain.open",
-            "打开窗帘（步进电机逆时针旋转360°）",
+            "打开窗帘",
             PropertyList(),
             [this](const PropertyList&) -> ReturnValue {
                 if (is_running_) {
@@ -231,6 +364,11 @@ private:
                     ESP_LOGI(TAG, "Curtain already open");
                     return "already_open";
                 }
+                
+                // 发送 HA 配置并订阅命令
+                PublishHAConfig();
+                SubscribeCommands();
+                
                 Command cmd = {CMD_OPEN};
                 bool success = SendCommand(cmd);
                 ESP_LOGI(TAG, "Open curtain command -> %s", success ? "OK" : "FAIL");
@@ -241,7 +379,7 @@ private:
         // 2. 关窗帘
         mcp_server.AddTool(
             "self.curtain.close",
-            "关闭窗帘（步进电机顺时针旋转360°）",
+            "关闭窗帘",
             PropertyList(),
             [this](const PropertyList&) -> ReturnValue {
                 if (is_running_) {
@@ -252,6 +390,11 @@ private:
                     ESP_LOGI(TAG, "Curtain already closed");
                     return "already_closed";
                 }
+                
+                // 发送 HA 配置并订阅命令
+                PublishHAConfig();
+                SubscribeCommands();
+                
                 Command cmd = {CMD_CLOSE};
                 bool success = SendCommand(cmd);
                 ESP_LOGI(TAG, "Close curtain command -> %s", success ? "OK" : "FAIL");
