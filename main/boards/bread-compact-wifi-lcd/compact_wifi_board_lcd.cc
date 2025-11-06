@@ -153,6 +153,15 @@ private:
             CURTAIN_IN3_GPIO,
             CURTAIN_IN4_GPIO
         );
+
+        mqtt.RegisterOnConnected([&]() {
+            ESP_LOGI(TAG, "MQTT connected - initializing Home Assistant integrations");
+            lamp.InitializeHaIntegration();
+            fan.InitializeHaIntegration();
+            curtain.InitializeHaIntegration();
+            dht11.InitializeHaIntegration();
+            mq2.InitializeHaIntegration();
+        });
         ESP_LOGI(TAG, "IoT peripherals initialized (Lamp, Fan, DHT11, MQ-2, MQTT, UART1, Curtain)");
     }
 

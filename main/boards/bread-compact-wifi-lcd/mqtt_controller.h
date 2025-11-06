@@ -9,6 +9,7 @@
 #include <string>
 #include <map>
 #include <functional>
+#include <vector>
 
 class MqttController {
 private:
@@ -24,6 +25,7 @@ private:
     std::string password_;
     std::string default_topic_;
     std::map<std::string, std::function<void(const std::string&, const std::string&)>> topic_callbacks_;  // 主题回调映射
+    std::vector<std::function<void()>> on_connected_callbacks_;
 
     // MQTT 事件处理回调
     static void MqttEventHandler(void* handler_args, esp_event_base_t base, 
@@ -37,6 +39,15 @@ private:
                 controller->is_connected_ = true;
                 // 重新订阅所有主题
                 controller->ResubscribeAll();
+                // 触发所有注册的连接回调
+                if (!controller->on_connected_callbacks_.empty()) {
+                    ESP_LOGI(TAG, "Executing %zu MQTT connected callbacks", controller->on_connected_callbacks_.size());
+                    for (const auto& callback : controller->on_connected_callbacks_) {
+                        if (callback) {
+                            callback();
+                        }
+                    }
+                }
                 break;
             case MQTT_EVENT_DISCONNECTED:
                 ESP_LOGI(TAG, "MQTT disconnected");
@@ -230,6 +241,16 @@ public:
         } else {
             ESP_LOGW(TAG, "Not connected, subscription will be done when connected: %s", topic);
             return true;  // 稍后连接时会自动订阅
+        }
+    }
+
+    void RegisterOnConnected(std::function<void()> callback) {
+        if (callback) {
+            on_connected_callbacks_.push_back(callback);
+            if (is_connected_) {
+                ESP_LOGI(TAG, "MQTT already connected, executing callback immediately");
+                callback();
+            }
         }
     }
     

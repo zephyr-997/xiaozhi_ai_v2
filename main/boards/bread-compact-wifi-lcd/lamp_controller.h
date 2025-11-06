@@ -17,6 +17,7 @@ private:
 
     gpio_num_t lamp_gpio_;
     bool power_state_;  // true=开, false=关
+    bool ha_initialized_;
 
     void InitializeGpio() {
         // 配置 GPIO 为输出模式
@@ -170,9 +171,8 @@ private:
             "打开灯光",
             PropertyList(),
             [this](const PropertyList&) -> ReturnValue {
+                InitializeHaIntegration();
                 SetPower(true);
-                PublishHAConfig();      // 发送 Home Assistant 配置
-                SubscribeCommands();    // 订阅 MQTT 命令主题
                 ESP_LOGI(TAG, "Lamp turned on via MCP");
                 return true;
             }
@@ -183,6 +183,7 @@ private:
             "关闭灯光",
             PropertyList(),
             [this](const PropertyList&) -> ReturnValue {
+                InitializeHaIntegration();
                 SetPower(false);
                 ESP_LOGI(TAG, "Lamp turned off via MCP");
                 return true;
@@ -192,7 +193,7 @@ private:
 
 public:
     explicit LampController(gpio_num_t lamp_gpio)
-        : lamp_gpio_(lamp_gpio), power_state_(false) {
+        : lamp_gpio_(lamp_gpio), power_state_(false), ha_initialized_(false) {
         InitializeGpio();
         RegisterTools();
         ESP_LOGI(TAG, "Initialized lamp controller on GPIO %d", lamp_gpio_);
@@ -210,6 +211,7 @@ public:
      * @brief 直接打开灯光，供外设联动调用。
      */
     bool TurnOnDirect() {
+        InitializeHaIntegration();
         SetPower(true);
         ESP_LOGI(TAG, "Lamp turned on via direct command");
         return true;
@@ -219,8 +221,28 @@ public:
      * @brief 直接关闭灯光，供外设联动调用。
      */
     bool TurnOffDirect() {
+        InitializeHaIntegration();
         SetPower(false);
         ESP_LOGI(TAG, "Lamp turned off via direct command");
+        return true;
+    }
+
+    bool InitializeHaIntegration() {
+        if (ha_initialized_) {
+            return true;
+        }
+
+        MqttController* mqtt = MqttController::GetInstance();
+        if (mqtt == nullptr || !mqtt->IsConnected()) {
+            ESP_LOGW(TAG, "MQTT not ready, skip HA integration for lamp");
+            return false;
+        }
+
+        PublishHAConfig();
+        SubscribeCommands();
+        PublishLampState();
+        ha_initialized_ = true;
+        ESP_LOGI(TAG, "Lamp HA integration initialized");
         return true;
     }
 };

@@ -72,7 +72,7 @@ private:
                     last_message_.assign(reinterpret_cast<char*>(data), length);
                     xSemaphoreGive(rx_buffer_mutex_);
                 }
-                ESP_LOGI(TAG, "UART1 RX %d bytes", length);
+                // ESP_LOGI(TAG, "UART1 RX %d bytes", length);
 
                 auto frame = parser.Parse(data, static_cast<size_t>(length));
                 if (frame.has_value()) {
@@ -154,7 +154,7 @@ private:
             xSemaphoreGive(tx_mutex_);
             return false;
         }
-        ESP_LOGI(TAG, "UART1 TX %d bytes", written);
+        // ESP_LOGI(TAG, "UART1 TX %d bytes", written);  // 注释掉调试信息
         xSemaphoreGive(tx_mutex_);
 
         return true;

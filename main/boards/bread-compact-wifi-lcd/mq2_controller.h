@@ -35,6 +35,7 @@ private:
     bool last_read_success_;
     TaskHandle_t read_task_handle_;
     bool last_alert_state_;
+    bool ha_config_initialized_;
 
     void InitAdc() {
         adc_oneshot_unit_init_cfg_t init_config = {
@@ -240,28 +241,7 @@ private:
 
         ESP_LOGI(TAG, "Background read task started");
 
-        bool ha_config_published = false;
-        ESP_LOGI(TAG, "Waiting for MQTT connection to publish HA config...");
-
-        for (int i = 0; i < 30; i++) {
-            vTaskDelay(pdMS_TO_TICKS(1000));
-
-            MqttController* mqtt = MqttController::GetInstance();
-            if (mqtt != nullptr && mqtt->IsConnected()) {
-                ESP_LOGI(TAG, "MQTT connected after %d seconds, publishing HA config now", i + 1);
-                controller->PublishHAConfig();
-                ha_config_published = true;
-                break;
-            }
-
-            if ((i + 1) % 5 == 0) {
-                ESP_LOGI(TAG, "Still waiting for MQTT... (%d/30s)", i + 1);
-            }
-        }
-
-        if (!ha_config_published) {
-            ESP_LOGW(TAG, "Timeout waiting for MQTT (30s), HA config not published");
-        }
+        controller->InitializeHaIntegration();
 
         while (true) {
             bool success = controller->ReadSensor();
@@ -272,6 +252,7 @@ private:
 
                 controller->PublishToMqtt();
                 controller->PublishToUart();
+                controller->InitializeHaIntegration();
 
                 bool current_alert = controller->sensor_alert_;
 
@@ -296,15 +277,6 @@ private:
 
                 ESP_LOGI(TAG, "Background read OK: PPM=%.2f, Alert=%s",
                          controller->ppm_, controller->sensor_alert_ ? "YES" : "NO");
-
-                if (!ha_config_published) {
-                    MqttController* mqtt = MqttController::GetInstance();
-                    if (mqtt != nullptr && mqtt->IsConnected()) {
-                        ESP_LOGI(TAG, "MQTT now available, publishing HA config (retry)");
-                        controller->PublishHAConfig();
-                        ha_config_published = true;
-                    }
-                }
             } else {
                 ESP_LOGW(TAG, "Background read failed, will retry in %d ms", MQ2_READ_INTERVAL_MS);
             }
@@ -373,7 +345,8 @@ public:
           last_read_time_(0),
           last_read_success_(false),
           read_task_handle_(nullptr),
-          last_alert_state_(false) {
+          last_alert_state_(false),
+          ha_config_initialized_(false) {
 
         ESP_LOGI(TAG, "Initializing MQ-2 on ADC unit %d channel %d...", adc_unit, adc_channel);
         InitAdc();
@@ -408,6 +381,23 @@ public:
         }
 
         ESP_LOGI(TAG, "✓ MQ-2 controller initialized on ADC channel %d", adc_channel);
+    }
+
+    bool InitializeHaIntegration() {
+        if (ha_config_initialized_) {
+            return true;
+        }
+
+        MqttController* mqtt = MqttController::GetInstance();
+        if (mqtt == nullptr || !mqtt->IsConnected()) {
+            ESP_LOGW(TAG, "MQTT not ready, skip HA integration for MQ-2");
+            return false;
+        }
+
+        PublishHAConfig();
+        ha_config_initialized_ = true;
+        ESP_LOGI(TAG, "MQ-2 HA integration initialized");
+        return true;
     }
 
     ~Mq2Controller() {

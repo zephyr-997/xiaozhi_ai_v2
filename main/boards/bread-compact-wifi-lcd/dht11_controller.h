@@ -22,6 +22,7 @@ private:
     uint32_t last_read_time_; // 上次读取时间
     bool last_read_success_;  // 上次读取是否成功
     TaskHandle_t read_task_handle_;  // 后台读取任务句柄
+    bool ha_config_initialized_;
     
     // ==================== DHT11 时序控制 ====================
     
@@ -148,7 +149,7 @@ private:
         // 7. 校验和验证
         uint8_t checksum = data[0] + data[1] + data[2] + data[3];
         if (checksum != data[4]) {
-            ESP_LOGE(TAG, "Checksum error: %d != %d", checksum, data[4]);
+            // ESP_LOGE(TAG, "Checksum error: %d != %d", checksum, data[4]);  // 注释掉调试信息
             return false;
         }
         
@@ -288,65 +289,27 @@ private:
     
     static void ReadTaskFunction(void* param) {
         auto* controller = static_cast<Dht11Controller*>(param);
-        
+
         ESP_LOGI(TAG, "Background read task started");
-        
-        // 等待 MQTT 连接成功后发布 HA 配置（最多等待 30 秒）
-        bool ha_config_published = false;
-        ESP_LOGI(TAG, "Waiting for MQTT connection to publish HA config...");
-        
-        for (int i = 0; i < 30; i++) {
-            vTaskDelay(pdMS_TO_TICKS(1000));
-            
-            MqttController* mqtt = MqttController::GetInstance();
-            if (mqtt != nullptr && mqtt->IsConnected()) {
-                ESP_LOGI(TAG, "MQTT connected after %d seconds, publishing HA config now", i + 1);
-                controller->PublishHAConfig();
-                ha_config_published = true;
-                break;
-            }
-            
-            // 每 5 秒打印一次等待状态
-            if ((i + 1) % 5 == 0) {
-                ESP_LOGI(TAG, "Still waiting for MQTT... (%d/30s)", i + 1);
-            }
-        }
-        
-        if (!ha_config_published) {
-            ESP_LOGW(TAG, "Timeout waiting for MQTT (30s), HA config not published - will retry on next read cycle");
-        }
-        
+        controller->InitializeHaIntegration();
+
         while (true) {
-            // 读取温湿度
             bool success = controller->ReadSensor();
-            
+
             if (success) {
                 controller->last_read_success_ = true;
                 controller->last_read_time_ = xTaskGetTickCount() * portTICK_PERIOD_MS;
-                
-                // 发送到 MQTT
+
                 controller->PublishToMqtt();
-                
-                // 发送到 UART
                 controller->PublishToUart();
-                
-                ESP_LOGI(TAG, "Background read OK: Temp=%.1f°C, Humi=%.1f%%", 
+                controller->InitializeHaIntegration();
+
+                ESP_LOGI(TAG, "Background read OK: Temp=%.1f°C, Humi=%.1f%%",
                          controller->temperature_, controller->humidity_);
-                
-                // 如果之前没有发布 HA 配置，现在尝试发布
-                if (!ha_config_published) {
-                    MqttController* mqtt = MqttController::GetInstance();
-                    if (mqtt != nullptr && mqtt->IsConnected()) {
-                        ESP_LOGI(TAG, "MQTT now available, publishing HA config (retry)");
-                        controller->PublishHAConfig();
-                        ha_config_published = true;
-                    }
-                }
             } else {
                 ESP_LOGW(TAG, "Background read failed, will retry in %d ms", DHT11_READ_INTERVAL_MS);
             }
-            
-            // 等待指定间隔
+
             vTaskDelay(pdMS_TO_TICKS(DHT11_READ_INTERVAL_MS));
         }
     }
@@ -429,7 +392,8 @@ public:
           humidity_(0),
           last_read_time_(0),
           last_read_success_(false),
-          read_task_handle_(nullptr) {
+          read_task_handle_(nullptr),
+          ha_config_initialized_(false) {
         
         ESP_LOGI(TAG, "Initializing DHT11 on GPIO %d...", pin);
         SetGpioMode(GPIO_MODE_INPUT);
@@ -469,6 +433,23 @@ public:
         }
         
         ESP_LOGI(TAG, "✓ DHT11 controller initialized on GPIO %d", pin);
+    }
+
+    bool InitializeHaIntegration() {
+        if (ha_config_initialized_) {
+            return true;
+        }
+
+        MqttController* mqtt = MqttController::GetInstance();
+        if (mqtt == nullptr || !mqtt->IsConnected()) {
+            ESP_LOGW(TAG, "MQTT not ready, skip HA integration for DHT11");
+            return false;
+        }
+
+        PublishHAConfig();
+        ha_config_initialized_ = true;
+        ESP_LOGI(TAG, "DHT11 HA integration initialized");
+        return true;
     }
     
     ~Dht11Controller() {

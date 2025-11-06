@@ -65,6 +65,7 @@ private:
         CURTAIN_UNKNOWN
     };
     CurtainState current_state_;
+    bool ha_initialized_;
     
     /**
      * @brief 初始化 GPIO 引脚。
@@ -265,7 +266,7 @@ private:
         );
         
         mqtt->Publish(MQTT_HA_CURTAIN_CONFIG_TOPIC, config_json);
-        ESP_LOGI(TAG, "Published HA config to %s", MQTT_HA_CURTAIN_CONFIG_TOPIC);
+        ESP_LOGI(TAG, "Published HA config to %s", MQTT_HA_CURTAIN_CONFIG_TOPIC);        
     }
 
     /**
@@ -275,10 +276,10 @@ private:
         MqttController* mqtt = MqttController::GetInstance();
         if (mqtt == nullptr || !mqtt->IsConnected()) {
             ESP_LOGD(TAG, "MQTT not ready, skip state publish");
-            return;
+            return; // 仅检查连接，不检查 ha_initialized_
         }
         
-        // 确定状态字符串
+        // 确定状态字符串，关键：直接发布状态，不依赖 ha_initialized_ 标志
         const char* state_str = "unknown";
         if (is_running_) {
             // 根据当前状态判断是正在打开还是关闭
@@ -365,9 +366,7 @@ private:
                     return "already_open";
                 }
                 
-                // 发送 HA 配置并订阅命令
-                PublishHAConfig();
-                SubscribeCommands();
+                InitializeHaIntegration();
                 
                 Command cmd = {CMD_OPEN};
                 bool success = SendCommand(cmd);
@@ -391,9 +390,7 @@ private:
                     return "already_closed";
                 }
                 
-                // 发送 HA 配置并订阅命令
-                PublishHAConfig();
-                SubscribeCommands();
+                InitializeHaIntegration();
                 
                 Command cmd = {CMD_CLOSE};
                 bool success = SendCommand(cmd);
@@ -452,7 +449,7 @@ public:
      */
     CurtainController(gpio_num_t in1, gpio_num_t in2, gpio_num_t in3, gpio_num_t in4)
         : in1_gpio_(in1), in2_gpio_(in2), in3_gpio_(in3), in4_gpio_(in4),
-          current_step_(0), is_running_(false), current_state_(CURTAIN_OPEN) {
+          current_step_(0), is_running_(false), current_state_(CURTAIN_OPEN), ha_initialized_(false) {
         
         // 初始化硬件
         InitializeGpio();
@@ -492,6 +489,25 @@ public:
         PowerOff();
         
         ESP_LOGI(TAG, "Controller destroyed");
+    }
+
+    bool InitializeHaIntegration() {
+        if (ha_initialized_) {
+            return true;
+        }
+
+        MqttController* mqtt = MqttController::GetInstance();
+        if (mqtt == nullptr || !mqtt->IsConnected()) {
+            ESP_LOGW(TAG, "MQTT not ready, skip HA integration for curtain");
+            return false; // 下次可重试
+        }
+
+        PublishHAConfig();
+        SubscribeCommands();
+        PublishCurtainState();
+        ha_initialized_ = true;
+        ESP_LOGI(TAG, "Curtain HA integration initialized");
+        return true;
     }
 };
 

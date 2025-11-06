@@ -19,6 +19,7 @@ private:
 
     gpio_num_t fan_gpio_;
     uint8_t speed_level_;  // 0=关闭, 1=一档(33%), 2=二档(67%), 3=三档(100%)
+    bool ha_initialized_;
     
     static constexpr uint8_t SPEED_OFF = 0;
     static constexpr uint8_t SPEED_LOW = 85;     // 一档 ~33%
@@ -261,6 +262,7 @@ private:
             PropertyList({Property("level", kPropertyTypeInteger, 0, 3)}),
             [this](const PropertyList& properties) -> ReturnValue {
                 int level = properties["level"].value<int>();
+                InitializeHaIntegration();
                 SetSpeed(level);
                 ESP_LOGI(TAG, "Fan set to level %d", level);
                 return true;
@@ -272,10 +274,8 @@ private:
             "开风扇，默认二档(67%)",
             PropertyList(),
             [this](const PropertyList&) -> ReturnValue {
+                InitializeHaIntegration();
                 SetSpeed(2);  // 默认二档
-                PublishHAConfig();      // 发送 Home Assistant 配置
-                SubscribeCommands();    // 订阅 MQTT 命令主题
-                // PublishFanAttributes(); // 发送实体属性（可选，已注释）
                 ESP_LOGI(TAG, "Fan turned on (level 2)");
                 return true;
             }
@@ -286,6 +286,7 @@ private:
             "关风扇",
             PropertyList(),
             [this](const PropertyList&) -> ReturnValue {
+                InitializeHaIntegration();
                 SetSpeed(0);
                 ESP_LOGI(TAG, "Fan turned off");
                 return true;
@@ -295,7 +296,7 @@ private:
 
 public:
     explicit FanController(gpio_num_t fan_gpio)
-        : fan_gpio_(fan_gpio), speed_level_(0) {
+        : fan_gpio_(fan_gpio), speed_level_(0), ha_initialized_(false) {
         ConfigurePwm();
         RegisterTools();
         ESP_LOGI(TAG, "Initialized 3-speed PWM fan controller on GPIO %d (25kHz)", fan_gpio_);
@@ -316,6 +317,7 @@ public:
      * @return true 始终返回成功。
      */
     bool SetSpeedLevel(uint8_t level) {
+        InitializeHaIntegration();
         SetSpeed(level);
         ESP_LOGI(TAG, "Fan speed set via direct command to level %d", speed_level_);
         return true;
@@ -325,6 +327,7 @@ public:
      * @brief 以默认二档速度开启风扇，用于外设联动。
      */
     bool TurnOnDefaultLevel() {
+        InitializeHaIntegration();
         SetSpeed(2);
         ESP_LOGI(TAG, "Fan turned on (default level 2) via direct command");
         return true;
@@ -334,8 +337,28 @@ public:
      * @brief 关闭风扇，用于外设联动。
      */
     bool TurnOffDirect() {
+        InitializeHaIntegration();
         SetSpeed(0);
         ESP_LOGI(TAG, "Fan turned off via direct command");
+        return true;
+    }
+
+    bool InitializeHaIntegration() {
+        if (ha_initialized_) {
+            return true;
+        }
+
+        MqttController* mqtt = MqttController::GetInstance();
+        if (mqtt == nullptr || !mqtt->IsConnected()) {
+            ESP_LOGW(TAG, "MQTT not ready, skip HA integration for fan");
+            return false;
+        }
+
+        PublishHAConfig();
+        SubscribeCommands();
+        PublishFanState();
+        ha_initialized_ = true;
+        ESP_LOGI(TAG, "Fan HA integration initialized");
         return true;
     }
 };
