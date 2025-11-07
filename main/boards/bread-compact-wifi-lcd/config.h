@@ -296,7 +296,7 @@
 #define DHT11_GPIO GPIO_NUM_3
 
 // DHT11 参数配置
-#define DHT11_READ_INTERVAL_MS  5000  // 后台读取间隔 5 秒
+#define DHT11_READ_INTERVAL_MS  8000  // 后台读取间隔 8 秒
 #define DHT11_TASK_STACK_SIZE   4096  // 后台任务栈大小
 #define DHT11_TASK_PRIORITY     5     // 后台任务优先级
 
@@ -304,7 +304,7 @@
 #define MQ2_ADC_UNIT            ADC_UNIT_2       // GPIO14 对应 ADC2 单元
 #define MQ2_ADC_CHANNEL         ADC_CHANNEL_3    // GPIO14 对应 ADC2 通道 3
 #define MQ2_READ_TIMES          10               // 多次采样取平均
-#define MQ2_READ_INTERVAL_MS    5000             // 后台读取间隔 5 秒
+#define MQ2_READ_INTERVAL_MS    10000            // 后台读取间隔 10 秒
 #define MQ2_TASK_STACK_SIZE     4096             // 后台任务栈大小
 #define MQ2_TASK_PRIORITY       5                // 后台任务优先级
 #define MQ2_PREHEAT_TIME_MS     5000             // 预热时间 5 秒（实际建议更长）
@@ -326,7 +326,7 @@
 // UART1 配置， 烧录已经默认使用U0
 #define UART1_TX_GPIO           GPIO_NUM_17
 #define UART1_RX_GPIO           GPIO_NUM_18
-#define UART1_BAUD_RATE         115200
+#define UART1_BAUD_RATE         9600
 #define UART1_RX_BUFFER_SIZE    512
 #define UART1_TX_BUFFER_SIZE    256
 #define UART1_RX_TASK_STACK_SIZE 4096

@@ -14,6 +14,7 @@
 #include "uart_service.h"
 #include "fan_controller.h"
 #include "lamp_controller.h"
+#include "curtain_controller.h"
 
 class UartController {
 private:
@@ -78,7 +79,7 @@ private:
                 if (frame.has_value()) {
                     ESP_LOGI(TAG, "Parsed frame payload: %02X %02X %02X", frame->field1, frame->field2, frame->field3);
 
-                    if (frame->field1 == 0x01 && frame->field2 == 0x02) { //风扇控制指令
+                    if (frame->field1 == 0x01 && frame->field2 == 0x04) { //风扇控制指令
                         FanController* fan = FanController::GetInstance();
                         if (fan != nullptr) {
                             bool result = false;
@@ -107,6 +108,23 @@ private:
                             ESP_LOGI(TAG, "Lamp control result: %s", result ? "success" : "failed");
                         } else {
                             ESP_LOGW(TAG, "LampController instance not available");
+                        }
+                    } else if (frame->field1 == 0x01 && frame->field2 == 0x03) { //窗帘控制指令
+                        CurtainController* curtain = CurtainController::GetInstance();
+                        if (curtain != nullptr) {
+                            bool result = false;
+                            if (frame->field3 == 0x01) {
+                                result = curtain->OpenDirect();
+                            } else if (frame->field3 == 0x02) {
+                                result = curtain->CloseDirect();
+                            } else if (frame->field3 == 0x03) {
+                                result = curtain->StopDirect();
+                            } else {
+                                ESP_LOGW(TAG, "Unknown curtain control value: 0x%02X", frame->field3);
+                            }
+                            ESP_LOGI(TAG, "Curtain control result: %s", result ? "success" : "failed");
+                        } else {
+                            ESP_LOGW(TAG, "CurtainController instance not available");
                         }
                     }
 
@@ -255,7 +273,7 @@ public:
 inline void LampController::SendLampUartFeedback(bool state) {
     UartController* uart = UartController::GetInstance();
     if (uart != nullptr) {
-        const char* uart_msg = state ? "a=1" : "a=2";
+        const char* uart_msg = state ? "a=1\xFF\xFF\xFF" : "a=2\xFF\xFF\xFF";
         uart->Send(uart_msg);
         ESP_LOGI(TAG, "Sent UART feedback: %s", uart_msg);
     } else {
@@ -267,12 +285,25 @@ inline void LampController::SendLampUartFeedback(bool state) {
 inline void FanController::SendFanUartFeedback(bool is_on) {
     UartController* uart = UartController::GetInstance();
     if (uart != nullptr) {
-        const char* uart_msg = is_on ? "a=5" : "a=6";
+        const char* uart_msg = is_on ? "a=5\xFF\xFF\xFF" : "a=6\xFF\xFF\xFF";
         uart->Send(uart_msg);
         ESP_LOGI(TAG, "Sent UART fan feedback: %s", uart_msg);
     } else {
         ESP_LOGD(TAG, "UART not ready, skip fan feedback");
     }
+}
+
+// 为CurtainController提供串口反馈实现
+inline void CurtainController::SendCurtainUartFeedback(bool is_open) {
+    UartController* uart = UartController::GetInstance();
+    if (uart == nullptr) {
+        ESP_LOGD(TAG, "UART not ready, skip curtain feedback");
+        return;
+    }
+
+    const char* uart_msg = is_open ? "a=7\xFF\xFF\xFF" : "a=8\xFF\xFF\xFF";
+    uart->Send(uart_msg);
+    ESP_LOGI(TAG, "Sent UART curtain feedback: %s", uart_msg);
 }
 
 #endif // __UART_CONTROLLER_H__

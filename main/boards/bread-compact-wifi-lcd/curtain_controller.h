@@ -1,6 +1,8 @@
 #ifndef __CURTAIN_CONTROLLER_H__
 #define __CURTAIN_CONTROLLER_H__
 
+#include <string>
+
 #include <driver/gpio.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -9,6 +11,9 @@
 #include "mqtt_controller.h"
 #include "config.h"
 #include "esp_log.h"
+
+// 前向声明，避免与 uart_controller.h 循环依赖
+class UartController;
 
 /**
  * @brief 窗帘控制器（基于 28BYJ-48 步进电机 + ULN2003 驱动）
@@ -21,6 +26,7 @@
 class CurtainController {
 private:
     static constexpr const char* TAG = "Curtain";
+    inline static CurtainController* instance_ = nullptr;
     
     // GPIO 引脚
     gpio_num_t in1_gpio_;
@@ -66,6 +72,11 @@ private:
     };
     CurtainState current_state_;
     bool ha_initialized_;
+
+    /**
+     * @brief 通过串口发送窗帘状态反馈。
+     */
+    void SendCurtainUartFeedback(bool is_open);
     
     /**
      * @brief 初始化 GPIO 引脚。
@@ -213,6 +224,18 @@ private:
             ESP_LOGW(TAG, "Command queue full");
             return false;
         }
+
+        switch (cmd.type) {
+            case CMD_OPEN:
+                SendCurtainUartFeedback(true);
+                break;
+            case CMD_CLOSE:
+                SendCurtainUartFeedback(false);
+                break;
+            default:
+                break;
+        }
+
         return true;
     }
     
@@ -273,12 +296,6 @@ private:
      * @brief 发送窗帘状态到 MQTT（符合 HA Cover 标准格式）。
      */
     void PublishCurtainState() {
-        MqttController* mqtt = MqttController::GetInstance();
-        if (mqtt == nullptr || !mqtt->IsConnected()) {
-            ESP_LOGD(TAG, "MQTT not ready, skip state publish");
-            return; // 仅检查连接，不检查 ha_initialized_
-        }
-        
         // 确定状态字符串，关键：直接发布状态，不依赖 ha_initialized_ 标志
         const char* state_str = "unknown";
         if (is_running_) {
@@ -291,9 +308,15 @@ private:
                 case CURTAIN_UNKNOWN: default: state_str = "unknown"; break;
             }
         }
-        
-        mqtt->Publish(MQTT_HA_CURTAIN_STATE_TOPIC, state_str);
-        ESP_LOGI(TAG, "Published curtain state: %s", state_str);
+
+        MqttController* mqtt = MqttController::GetInstance();
+        if (mqtt != nullptr && mqtt->IsConnected()) {
+            mqtt->Publish(MQTT_HA_CURTAIN_STATE_TOPIC, state_str);
+            ESP_LOGI(TAG, "Published curtain state: %s", state_str);
+        } else {
+            ESP_LOGD(TAG, "MQTT not ready, skip state publish");
+        }
+
     }
 
     /**
@@ -449,7 +472,7 @@ public:
      */
     CurtainController(gpio_num_t in1, gpio_num_t in2, gpio_num_t in3, gpio_num_t in4)
         : in1_gpio_(in1), in2_gpio_(in2), in3_gpio_(in3), in4_gpio_(in4),
-          current_step_(0), is_running_(false), current_state_(CURTAIN_OPEN), ha_initialized_(false) {
+          current_step_(0), is_running_(false), current_state_(CURTAIN_CLOSED), ha_initialized_(false) {
         
         // 初始化硬件
         InitializeGpio();
@@ -469,6 +492,8 @@ public:
         
         ESP_LOGI(TAG, "Initialized on GPIO IN1=%d, IN2=%d, IN3=%d, IN4=%d",
                 in1, in2, in3, in4);
+
+        instance_ = this;
     }
     
     /**
@@ -489,6 +514,72 @@ public:
         PowerOff();
         
         ESP_LOGI(TAG, "Controller destroyed");
+
+        if (instance_ == this) {
+            instance_ = nullptr;
+        }
+    }
+
+    /**
+     * @brief 获取当前窗帘控制器单例。
+     */
+    static CurtainController* GetInstance() {
+        return instance_;
+    }
+
+    /**
+     * @brief 直接打开窗帘，用于 UART 等外设联动。
+     */
+    bool OpenDirect() {
+        if (is_running_) {
+            ESP_LOGW(TAG, "Curtain is already running");
+            return false;
+        }
+        if (current_state_ == CURTAIN_OPEN) {
+            ESP_LOGI(TAG, "Curtain already open");
+            PublishCurtainState();
+            return true;
+        }
+
+        InitializeHaIntegration();
+
+        Command cmd = {CMD_OPEN};
+        bool success = SendCommand(cmd);
+        ESP_LOGI(TAG, "Open curtain command (direct) -> %s", success ? "OK" : "FAIL");
+        return success;
+    }
+
+    /**
+     * @brief 直接关闭窗帘，用于 UART 等外设联动。
+     */
+    bool CloseDirect() {
+        if (is_running_) {
+            ESP_LOGW(TAG, "Curtain is already running");
+            return false;
+        }
+        if (current_state_ == CURTAIN_CLOSED) {
+            ESP_LOGI(TAG, "Curtain already closed");
+            PublishCurtainState();
+            return true;
+        }
+
+        InitializeHaIntegration();
+
+        Command cmd = {CMD_CLOSE};
+        bool success = SendCommand(cmd);
+        ESP_LOGI(TAG, "Close curtain command (direct) -> %s", success ? "OK" : "FAIL");
+        return success;
+    }
+
+    /**
+     * @brief 直接停止窗帘动作，用于 UART 等外设联动。
+     */
+    bool StopDirect() {
+        InitializeHaIntegration();
+        Command cmd = {CMD_STOP};
+        bool success = SendCommand(cmd);
+        ESP_LOGI(TAG, "Stop curtain command (direct) -> %s", success ? "OK" : "FAIL");
+        return success;
     }
 
     bool InitializeHaIntegration() {

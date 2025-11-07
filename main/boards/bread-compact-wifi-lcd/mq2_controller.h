@@ -157,19 +157,8 @@ private:
         }
 
         char line1[64];
-        char line2[64];
-
-        snprintf(line1, sizeof(line1), "saver.t3.txt=\"%.0f\"\r\n", ppm_);
-        snprintf(line2, sizeof(line2), "main.t2.txt=\"%.0f\"\r\n", ppm_);
-
-        bool success = uart->Send(line1);
-        success &= uart->Send(line2);
-
-        if (success) {
-            ESP_LOGD(TAG, "Published to UART: PPM=%.2f", ppm_);
-        } else {
-            ESP_LOGW(TAG, "Failed to publish to UART");
-        }
+        snprintf(line1, sizeof(line1), "saver.t6.txt=\"%d\"\xFF\xFF\xFF", static_cast<int>(ppm_));
+        uart->Send(line1);
     }
 
     void PublishHAConfig() {

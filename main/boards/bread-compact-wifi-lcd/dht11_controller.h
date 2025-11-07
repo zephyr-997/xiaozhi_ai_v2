@@ -203,20 +203,14 @@ private:
         char line2[64];
         char line3[64];
         
-        snprintf(line1, sizeof(line1), "saver.t2.txt=\"%d\"\r\n", static_cast<int>(humidity_));
-        snprintf(line2, sizeof(line2), "saver.t1.txt=\"%d\"\r\n", static_cast<int>(temperature_));
-        snprintf(line3, sizeof(line3), "main.t1.txt=\"%d\"\r\n", static_cast<int>(temperature_));
+        snprintf(line1, sizeof(line1), "saver.t2.txt=\"%d\"\xFF\xFF\xFF", static_cast<int>(humidity_));
+        snprintf(line2, sizeof(line2), "saver.t1.txt=\"%d\"\xFF\xFF\xFF", static_cast<int>(temperature_));
+        snprintf(line3, sizeof(line3), "main.t1.txt=\"%d\"\xFF\xFF\xFF", static_cast<int>(temperature_));
         
         // 发送到串口
-        bool success = uart->Send(line1);
-        success &= uart->Send(line2);
-        success &= uart->Send(line3);
-        
-        if (success) {
-            ESP_LOGD(TAG, "Published to UART: Temp=%.1f°C, Humi=%.1f%%", temperature_, humidity_);
-        } else {
-            ESP_LOGW(TAG, "Failed to publish to UART");
-        }
+        uart->Send(line1);
+        uart->Send(line2);
+        uart->Send(line3);
     }
     
     void PublishHAConfig() {
