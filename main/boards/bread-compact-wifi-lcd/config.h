@@ -372,6 +372,9 @@
 #define MQTT_HA_CURTAIN_STATE_TOPIC         "XZ-ESP32-01/curtain/state"                        // 窗帘状态主题
 #define MQTT_HA_CURTAIN_COMMAND_TOPIC       "XZ-ESP32-01/curtain/set"                          // 窗帘命令主题（接收）
 
+// 文本对话 MQTT 主题
+#define MQTT_CHAT_TOPIC                     "XZ-ESP32-01/chat/information"                     // 文本对话接收主题
+
 // 设备信息
 #define DEVICE_ID          "XZ-ESP32-01"       // 设备唯一标识符
 #define DEVICE_NAME        "小智 ESP32"        // 设备显示名称

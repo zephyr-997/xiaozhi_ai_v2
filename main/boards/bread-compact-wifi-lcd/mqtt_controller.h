@@ -6,6 +6,8 @@
 #include "esp_log.h"
 #include "esp_event.h"
 #include "esp_wifi.h"
+#include "application.h"
+#include "config.h"
 #include <string>
 #include <map>
 #include <functional>
@@ -147,6 +149,12 @@ private:
 
     void RegisterTools() {
         auto& mcp_server = McpServer::GetInstance();
+
+        // 订阅文本对话主题
+        Subscribe(MQTT_CHAT_TOPIC, [](const std::string& topic, const std::string& payload) {
+            ESP_LOGI(TAG, "Received text chat command via MQTT: %s", payload.c_str());
+            Application::GetInstance().ChatWithText(payload);
+        });
 
         // 工具1: 发送简单的 hello 消息
         mcp_server.AddTool(
