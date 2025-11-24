@@ -17,6 +17,7 @@
 #include "uart_controller.h"
 #include "fan_controller.h"
 #include "lamp_controller.h"
+#include "curtain_controller.h"
 
 class Mq2Controller {
 private:
@@ -259,6 +260,13 @@ private:
                         lamp->TurnOnDirect();
                     } else {
                         ESP_LOGW(TAG, "LampController not available for smoke alert handling");
+                    }
+
+                    CurtainController* curtain = CurtainController::GetInstance();
+                    if (curtain != nullptr) {
+                        curtain->OpenDirect();
+                    } else {
+                        ESP_LOGW(TAG, "CurtainController not available for smoke alert handling");
                     }
                 }
 
