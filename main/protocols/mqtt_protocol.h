@@ -52,8 +52,10 @@ private:
     void ParseServerHello(const cJSON* root);
     std::string DecodeHexString(const std::string& hex_string);
 
-    bool SendText(const std::string& text) override;
+    bool SendRawText(const std::string& text) override;
     std::string GetHelloMessage();
+    bool SendText(const std::string& text) override;
+    bool IsConnected() const override { return IsAudioChannelOpened(); }
 };
 
 

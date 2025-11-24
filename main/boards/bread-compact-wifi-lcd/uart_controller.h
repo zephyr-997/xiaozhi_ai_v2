@@ -15,6 +15,7 @@
 #include "fan_controller.h"
 #include "lamp_controller.h"
 #include "curtain_controller.h"
+#include "application.h"
 
 class UartController {
 private:
@@ -74,6 +75,20 @@ private:
                     xSemaphoreGive(rx_buffer_mutex_);
                 }
                 // ESP_LOGI(TAG, "UART1 RX %d bytes", length);
+
+                // 检查是否是文本对话指令 "chat:..."
+                if (length > 5 && strncmp(reinterpret_cast<const char*>(data), "chat:", 5) == 0) {
+                    std::string text(reinterpret_cast<char*>(data) + 5, length - 5);
+                    // 去除可能的换行符
+                    while (!text.empty() && (text.back() == '\r' || text.back() == '\n')) {
+                        text.pop_back();
+                    }
+                    if (!text.empty()) {
+                        ESP_LOGI(TAG, "Received chat command: %s", text.c_str());
+                        Application::GetInstance().ChatWithText(text);
+                    }
+                    continue; // 跳过后续的二进制帧解析
+                }
 
                 auto frame = parser.Parse(data, static_cast<size_t>(length));
                 if (frame.has_value()) {

@@ -140,7 +140,7 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
     return true;
 }
 
-bool MqttProtocol::SendText(const std::string& text) {
+bool MqttProtocol::SendRawText(const std::string& text) {
     if (publish_topic_.empty()) {
         return false;
     }
@@ -150,6 +150,61 @@ bool MqttProtocol::SendText(const std::string& text) {
         return false;
     }
     return true;
+}
+
+bool MqttProtocol::SendText(const std::string& text) {
+    bool just_opened = false;
+    if (!IsAudioChannelOpened()) {
+        ESP_LOGI(TAG, "Connection not open, trying to open audio channel for text chat...");
+        if (!OpenAudioChannel()) {
+            ESP_LOGE(TAG, "Failed to open audio channel for text chat");
+            return false;
+        }
+        just_opened = true;
+    }
+
+    // Prepare Opus silence frame (3 bytes: 0xF8, 0xFF, 0xFE)
+    uint8_t opus_silence[] = {0xF8, 0xFF, 0xFE};
+
+    // Strategy: Send UDP hole punching packets
+    // If connection just opened, send multiple times to ensure NAT mapping
+    int punch_count = just_opened ? 3 : 1;
+
+    for (int i = 0; i < punch_count; i++) {
+        auto packet = std::make_unique<AudioStreamPacket>();
+        packet->sample_rate = 16000;
+        packet->frame_duration = 60;
+        packet->timestamp = 0;
+        packet->payload.assign(opus_silence, opus_silence + sizeof(opus_silence));
+        
+        if (SendAudio(std::move(packet))) {
+            ESP_LOGI(TAG, "Sent UDP hole punching packet (%d/%d)", i + 1, punch_count);
+        } else {
+            ESP_LOGW(TAG, "Failed to send UDP hole punching packet");
+        }
+
+        // Small delay between packets for router NAT table update
+        if (just_opened && i < punch_count - 1) {
+            vTaskDelay(pdMS_TO_TICKS(20));
+        }
+    }
+
+    // Extra delay after hole punching to ensure server receives UDP before MQTT command triggers TTS
+    if (just_opened) {
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "session_id", session_id_.c_str());
+    cJSON_AddStringToObject(root, "type", "listen");
+    cJSON_AddStringToObject(root, "state", "detect");
+    cJSON_AddStringToObject(root, "text", text.c_str());
+    char *json_str = cJSON_PrintUnformatted(root);
+    ESP_LOGI(TAG, "Sending text payload: %s", json_str);
+    bool ret = SendRawText(json_str);
+    free(json_str);
+    cJSON_Delete(root);
+    return ret;
 }
 
 bool MqttProtocol::SendAudio(std::unique_ptr<AudioStreamPacket> packet) {
@@ -188,7 +243,7 @@ void MqttProtocol::CloseAudioChannel() {
     message += "\"session_id\":\"" + session_id_ + "\",";
     message += "\"type\":\"goodbye\"";
     message += "}";
-    SendText(message);
+    SendRawText(message);
 
     if (on_audio_channel_closed_ != nullptr) {
         on_audio_channel_closed_();
@@ -208,7 +263,7 @@ bool MqttProtocol::OpenAudioChannel() {
     xEventGroupClearBits(event_group_handle_, MQTT_PROTOCOL_SERVER_HELLO_EVENT);
 
     auto message = GetHelloMessage();
-    if (!SendText(message)) {
+    if (!SendRawText(message)) {
         return false;
     }
 

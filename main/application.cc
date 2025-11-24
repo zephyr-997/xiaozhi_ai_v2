@@ -345,6 +345,25 @@ void Application::StopListening() {
     });
 }
 
+void Application::ChatWithText(const std::string& text) {
+    Schedule([this, text]() {
+        if (!protocol_) {
+            ESP_LOGW(TAG, "Protocol not initialized");
+            return;
+        }
+
+        if (device_state_ == kDeviceStateListening) {
+            SetDeviceState(kDeviceStateIdle);
+        }
+
+        auto display = Board::GetInstance().GetDisplay();
+        display->SetChatMessage("user", text.c_str());
+        display->SetStatus(Lang::Strings::PLEASE_WAIT);
+
+        protocol_->SendText(text);
+    });
+}
+
 void Application::Start() {
     auto& board = Board::GetInstance();
     SetDeviceState(kDeviceStateStarting);

@@ -45,13 +45,13 @@ void Protocol::SendAbortSpeaking(AbortReason reason) {
         message += ",\"reason\":\"wake_word_detected\"";
     }
     message += "}";
-    SendText(message);
+    SendRawText(message);
 }
 
 void Protocol::SendWakeWordDetected(const std::string& wake_word) {
     std::string json = "{\"session_id\":\"" + session_id_ + 
                       "\",\"type\":\"listen\",\"state\":\"detect\",\"text\":\"" + wake_word + "\"}";
-    SendText(json);
+    SendRawText(json);
 }
 
 void Protocol::SendStartListening(ListeningMode mode) {
@@ -65,17 +65,17 @@ void Protocol::SendStartListening(ListeningMode mode) {
         message += ",\"mode\":\"manual\"";
     }
     message += "}";
-    SendText(message);
+    SendRawText(message);
 }
 
 void Protocol::SendStopListening() {
     std::string message = "{\"session_id\":\"" + session_id_ + "\",\"type\":\"listen\",\"state\":\"stop\"}";
-    SendText(message);
+    SendRawText(message);
 }
 
 void Protocol::SendMcpMessage(const std::string& payload) {
     std::string message = "{\"session_id\":\"" + session_id_ + "\",\"type\":\"mcp\",\"payload\":" + payload + "}";
-    SendText(message);
+    SendRawText(message);
 }
 
 bool Protocol::IsTimeout() const {

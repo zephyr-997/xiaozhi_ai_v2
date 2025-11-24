@@ -57,7 +57,7 @@ bool WebsocketProtocol::SendAudio(std::unique_ptr<AudioStreamPacket> packet) {
     }
 }
 
-bool WebsocketProtocol::SendText(const std::string& text) {
+bool WebsocketProtocol::SendRawText(const std::string& text) {
     if (websocket_ == nullptr || !websocket_->IsConnected()) {
         return false;
     }
@@ -69,6 +69,28 @@ bool WebsocketProtocol::SendText(const std::string& text) {
     }
 
     return true;
+}
+
+bool WebsocketProtocol::SendText(const std::string& text) {
+    if (!IsAudioChannelOpened()) {
+        ESP_LOGI(TAG, "Connection not open, trying to open audio channel for text chat...");
+        if (!OpenAudioChannel()) {
+            ESP_LOGE(TAG, "Failed to open audio channel for text chat");
+            return false;
+        }
+    }
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "session_id", session_id_.c_str());
+    cJSON_AddStringToObject(root, "type", "listen");
+    cJSON_AddStringToObject(root, "state", "detect");
+    cJSON_AddStringToObject(root, "text", text.c_str());
+    char *json_str = cJSON_PrintUnformatted(root);
+    ESP_LOGI(TAG, "Sending text payload: %s", json_str);
+    bool ret = SendRawText(json_str);
+    free(json_str);
+    cJSON_Delete(root);
+    return ret;
 }
 
 bool WebsocketProtocol::IsAudioChannelOpened() const {
@@ -180,7 +202,7 @@ bool WebsocketProtocol::OpenAudioChannel() {
 
     // Send hello message to describe the client
     auto message = GetHelloMessage();
-    if (!SendText(message)) {
+    if (!SendRawText(message)) {
         return false;
     }
 
