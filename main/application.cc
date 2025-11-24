@@ -303,6 +303,7 @@ void Application::StartListening() {
     
     if (device_state_ == kDeviceStateIdle) {
         Schedule([this]() {
+            should_listen_after_talk_ = true;
             if (!protocol_->IsAudioChannelOpened()) {
                 SetDeviceState(kDeviceStateConnecting);
                 if (!protocol_->OpenAudioChannel()) {
@@ -314,6 +315,7 @@ void Application::StartListening() {
         });
     } else if (device_state_ == kDeviceStateSpeaking) {
         Schedule([this]() {
+            should_listen_after_talk_ = true;
             AbortSpeaking(kAbortReasonNone);
             SetListeningMode(kListeningModeManualStop);
         });
@@ -348,14 +350,15 @@ void Application::StopListening() {
 void Application::ChatWithText(const std::string& text) {
     Schedule([this, text]() {
         if (!protocol_) {
-            ESP_LOGW(TAG, "Protocol not initialized");
+            ESP_LOGE(TAG, "Protocol not initialized");
             return;
         }
 
         if (device_state_ == kDeviceStateListening) {
-            SetDeviceState(kDeviceStateIdle);
+            AbortSpeaking(kAbortReasonNone);
         }
 
+        should_listen_after_talk_ = false;
         auto display = Board::GetInstance().GetDisplay();
         display->SetChatMessage("user", text.c_str());
         display->SetStatus(Lang::Strings::PLEASE_WAIT);
@@ -473,7 +476,7 @@ void Application::Start() {
             } else if (strcmp(state->valuestring, "stop") == 0) {
                 Schedule([this]() {
                     if (device_state_ == kDeviceStateSpeaking) {
-                        if (listening_mode_ == kListeningModeManualStop) {
+                        if (listening_mode_ == kListeningModeManualStop || !should_listen_after_talk_) {
                             SetDeviceState(kDeviceStateIdle);
                         } else {
                             SetDeviceState(kDeviceStateListening);
@@ -637,6 +640,7 @@ void Application::OnWakeWordDetected() {
     }
 
     if (device_state_ == kDeviceStateIdle) {
+        should_listen_after_talk_ = true;
         audio_service_.EncodeWakeWord();
 
         if (!protocol_->IsAudioChannelOpened()) {

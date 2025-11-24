@@ -82,6 +82,7 @@ private:
 
     bool has_server_time_ = false;
     bool aborted_ = false;
+    bool should_listen_after_talk_ = true;
     int clock_ticks_ = 0;
     TaskHandle_t check_new_version_task_handle_ = nullptr;
     TaskHandle_t main_event_loop_task_handle_ = nullptr;

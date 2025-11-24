@@ -167,8 +167,8 @@ bool MqttProtocol::SendText(const std::string& text) {
     uint8_t opus_silence[] = {0xF8, 0xFF, 0xFE};
 
     // Strategy: Send UDP hole punching packets
-    // If connection just opened, send multiple times to ensure NAT mapping
-    int punch_count = just_opened ? 3 : 1;
+    // Always send multiple packets to ensure NAT mapping, as text chat might happen after long idle
+    int punch_count = 5;
 
     for (int i = 0; i < punch_count; i++) {
         auto packet = std::make_unique<AudioStreamPacket>();
@@ -184,15 +184,13 @@ bool MqttProtocol::SendText(const std::string& text) {
         }
 
         // Small delay between packets for router NAT table update
-        if (just_opened && i < punch_count - 1) {
+        if (i < punch_count - 1) {
             vTaskDelay(pdMS_TO_TICKS(20));
         }
     }
 
     // Extra delay after hole punching to ensure server receives UDP before MQTT command triggers TTS
-    if (just_opened) {
-        vTaskDelay(pdMS_TO_TICKS(50));
-    }
+    vTaskDelay(pdMS_TO_TICKS(100));
 
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "session_id", session_id_.c_str());
