@@ -6,6 +6,7 @@
 #include "mqtt_controller.h"
 #include "config.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 
 // 前向声明，避免循环依赖
 class UartController;
@@ -18,6 +19,40 @@ private:
     gpio_num_t lamp_gpio_;
     bool power_state_;  // true=开, false=关
     bool ha_initialized_;
+
+    esp_timer_handle_t blink_timer_ = nullptr;
+    bool is_blinking_ = false;
+
+    static void BlinkTimerCallback(void* arg) {
+        LampController* self = static_cast<LampController*>(arg);
+        if (self) {
+            self->SetPower(!self->power_state_);
+        }
+    }
+
+    void StartBlink() {
+        if (blink_timer_ == nullptr) {
+            esp_timer_create_args_t timer_args = {};
+            timer_args.callback = &BlinkTimerCallback;
+            timer_args.arg = this;
+            timer_args.name = "lamp_blink";
+            ESP_ERROR_CHECK(esp_timer_create(&timer_args, &blink_timer_));
+        }
+
+        if (!is_blinking_) {
+            ESP_ERROR_CHECK(esp_timer_start_periodic(blink_timer_, 1000000));
+            is_blinking_ = true;
+            ESP_LOGI(TAG, "Lamp blink started");
+        }
+    }
+
+    void StopBlink() {
+        if (is_blinking_ && blink_timer_ != nullptr) {
+            esp_timer_stop(blink_timer_);
+            is_blinking_ = false;
+            ESP_LOGI(TAG, "Lamp blink stopped");
+        }
+    }
 
     void InitializeGpio() {
         // 配置 GPIO 为输出模式
@@ -117,6 +152,8 @@ private:
     void HandleCommand(const std::string& payload) {
         ESP_LOGI(TAG, "Received command: %s", payload.c_str());
         
+        StopBlink();
+
         if (payload == "ON") {
             SetPower(true);
             ESP_LOGI(TAG, "Lamp turned ON via MQTT");
@@ -167,11 +204,23 @@ private:
         );
 
         mcp_server.AddTool(
+            "self.lamp.blink",
+            "让灯光开始闪烁（1秒间隔），再次调用开关灯可停止",
+            PropertyList(),
+            [this](const PropertyList&) -> ReturnValue {
+                InitializeHaIntegration();
+                StartBlink();
+                return true;
+            }
+        );
+
+        mcp_server.AddTool(
             "self.lamp.turn_on",
             "打开灯光",
             PropertyList(),
             [this](const PropertyList&) -> ReturnValue {
                 InitializeHaIntegration();
+                StopBlink();
                 SetPower(true);
                 ESP_LOGI(TAG, "Lamp turned on via MCP");
                 return true;
@@ -184,6 +233,7 @@ private:
             PropertyList(),
             [this](const PropertyList&) -> ReturnValue {
                 InitializeHaIntegration();
+                StopBlink();
                 SetPower(false);
                 ESP_LOGI(TAG, "Lamp turned off via MCP");
                 return true;
@@ -212,6 +262,7 @@ public:
      */
     bool TurnOnDirect() {
         InitializeHaIntegration();
+        StopBlink();
         SetPower(true);
         ESP_LOGI(TAG, "Lamp turned on via direct command");
         return true;
@@ -222,6 +273,7 @@ public:
      */
     bool TurnOffDirect() {
         InitializeHaIntegration();
+        StopBlink();
         SetPower(false);
         ESP_LOGI(TAG, "Lamp turned off via direct command");
         return true;
