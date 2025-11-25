@@ -248,25 +248,27 @@ private:
 
                 if (current_alert && !controller->last_alert_state_) {
                     ESP_LOGW(TAG, "Smoke alert detected, activating fan at max speed");
+                    
                     FanController* fan = FanController::GetInstance();
                     if (fan != nullptr) {
+                        fan->SetSpeedLevel(2); // bug: The first serial port send instruction to be invoked fails to take effect 
                         fan->SetSpeedLevel(3);
                     } else {
                         ESP_LOGW(TAG, "FanController not available for smoke alert handling");
                     }
 
-                    LampController* lamp = LampController::GetInstance();
-                    if (lamp != nullptr) {
-                        lamp->StartBlinkDirect();
-                    } else {
-                        ESP_LOGW(TAG, "LampController not available for smoke alert handling");
-                    }
-
-                    CurtainController* curtain = CurtainController::GetInstance();
+                     CurtainController* curtain = CurtainController::GetInstance();
                     if (curtain != nullptr) {
                         curtain->OpenDirect();
                     } else {
                         ESP_LOGW(TAG, "CurtainController not available for smoke alert handling");
+                    }      
+
+                    LampController* lamp = LampController::GetInstance();
+                    if (lamp != nullptr) {
+                        lamp->StartBlinkDirect(); // Turn on the timer,so no message will be sent immediately
+                    } else {
+                        ESP_LOGW(TAG, "LampController not available for smoke alert handling");
                     }
                 }
 
