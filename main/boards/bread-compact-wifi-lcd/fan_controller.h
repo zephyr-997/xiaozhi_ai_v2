@@ -154,7 +154,7 @@ private:
     }*/
 
     // 发送串口反馈（在 uart_controller.h 中实现）
-    void SendFanUartFeedback(bool is_on);
+    inline void SendFanUartFeedback(bool is_on);
 
     void SetSpeed(uint8_t level) {
         if (level > 3) {

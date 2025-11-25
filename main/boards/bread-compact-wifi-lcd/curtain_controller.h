@@ -76,7 +76,7 @@ private:
     /**
      * @brief 通过串口发送窗帘状态反馈。
      */
-    void SendCurtainUartFeedback(bool is_open);
+    inline void SendCurtainUartFeedback(bool is_open);
     
     /**
      * @brief 初始化 GPIO 引脚。

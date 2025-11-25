@@ -131,7 +131,7 @@ private:
     }
 
     // 串口反馈函数声明（实现在 uart_controller.h 包含后）
-    void SendLampUartFeedback(bool state);
+   inline void SendLampUartFeedback(bool state);
 
     void SetPower(bool state) {
         power_state_ = state;
@@ -276,6 +276,16 @@ public:
         StopBlink();
         SetPower(false);
         ESP_LOGI(TAG, "Lamp turned off via direct command");
+        return true;
+    }
+
+    /**
+     * @brief 直接启动闪烁，供外设联动调用。
+     */
+    bool StartBlinkDirect() {
+        InitializeHaIntegration();
+        StartBlink();
+        ESP_LOGI(TAG, "Lamp blink started via direct command");
         return true;
     }
 

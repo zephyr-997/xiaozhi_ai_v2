@@ -257,7 +257,7 @@ private:
 
                     LampController* lamp = LampController::GetInstance();
                     if (lamp != nullptr) {
-                        lamp->TurnOnDirect();
+                        lamp->StartBlinkDirect();
                     } else {
                         ESP_LOGW(TAG, "LampController not available for smoke alert handling");
                     }
