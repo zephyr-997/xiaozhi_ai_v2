@@ -309,7 +309,7 @@
 #define MQ2_TASK_PRIORITY       5                // 后台任务优先级
 #define MQ2_PREHEAT_TIME_MS     5000             // 预热时间 5 秒（实际建议更长）
 #define MQ2_R0_VALUE            30.0f            // 清洁空气下校准的 R0 值需现场调校
-#define MQ2_ALERT_THRESHOLD     100.0f           // 告警阈值 (PPM)
+#define MQ2_ALERT_THRESHOLD     150.0f           // 告警阈值 (PPM)
 
 // 窗帘控制器（步进电机）GPIO 定义
 #define CURTAIN_IN1_GPIO  GPIO_NUM_9
